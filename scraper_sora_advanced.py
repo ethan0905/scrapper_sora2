@@ -2,6 +2,9 @@ import os
 import time
 import pathlib
 import argparse
+import json
+import hashlib
+from datetime import datetime
 from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
@@ -661,8 +664,417 @@ class SoraScraper:
                 self.driver.quit()
             except:
                 pass
-
-
+    
+    def extract_video_metadata(self, video_url):
+        """
+        Extrait les métadonnées complètes d'une vidéo Sora.
+        Retourne un dictionnaire structuré pour import dans une app type TikTok.
+        
+        Args:
+            video_url (str): URL de la vidéo
+            
+        Returns:
+            dict: Métadonnées complètes de la vidéo
+        """
+        metadata = {
+            "video_url": video_url,
+            "video_id": self._generate_video_id(video_url),
+            "scraped_at": datetime.now().isoformat(),
+            "creator": {
+                "username": None,
+                "display_name": None,
+                "profile_url": None,
+                "avatar_url": None,
+                "verified": False
+            },
+            "content": {
+                "description": None,
+                "prompt": None,
+                "title": None
+            },
+            "engagement": {
+                "likes": 0,
+                "comments_count": 0,
+                "shares": 0,
+                "views": 0,
+                "remixes": 0
+            },
+            "comments": [],
+            "media": {
+                "thumbnail_url": None,
+                "duration": None,
+                "resolution": None
+            },
+            "metadata": {
+                "post_url": None,
+                "created_at": None,
+                "model_version": None
+            }
+        }
+        
+        try:
+            # Trouver l'élément parent de la vidéo (le post complet)
+            video_element = None
+            try:
+                # Chercher l'élément vidéo avec cette URL
+                videos = self.driver.find_elements(By.TAG_NAME, "video")
+                for vid in videos:
+                    if vid.get_attribute("src") == video_url:
+                        video_element = vid
+                        break
+            except:
+                pass
+            
+            if not video_element:
+                print(f"   ⚠️  Impossible de trouver l'élément vidéo pour: {video_url[:50]}...")
+                return metadata
+            
+            # Remonter à l'article/post parent
+            try:
+                post_container = video_element.find_element(By.XPATH, "./ancestor::article | ./ancestor::div[contains(@class, 'post')] | ./ancestor::a[contains(@href, '/p/')]")
+            except:
+                # Essayer avec plusieurs ancêtres
+                try:
+                    post_container = video_element.find_element(By.XPATH, "./../../../..")
+                except:
+                    post_container = video_element
+            
+            # 1. EXTRAIRE LE CRÉATEUR
+            try:
+                # Chercher le username (plusieurs patterns possibles)
+                username_selectors = [
+                    "a[href*='/profile/']",
+                    "a[href*='/user/']",
+                    "[data-username]",
+                    ".username",
+                    ".creator-name"
+                ]
+                
+                for selector in username_selectors:
+                    try:
+                        creator_link = post_container.find_element(By.CSS_SELECTOR, selector)
+                        href = creator_link.get_attribute("href")
+                        if href and ("/profile/" in href or "/user/" in href):
+                            username = href.split("/")[-1]
+                            metadata["creator"]["username"] = username
+                            metadata["creator"]["profile_url"] = href
+                            metadata["creator"]["display_name"] = creator_link.text.strip() or username
+                            break
+                    except:
+                        continue
+                
+                # Chercher l'avatar
+                try:
+                    avatar = post_container.find_element(By.CSS_SELECTOR, "img[alt*='avatar'], img[src*='avatar'], img[class*='avatar']")
+                    metadata["creator"]["avatar_url"] = avatar.get_attribute("src")
+                except:
+                    pass
+                
+                # Vérifier si vérifié (badge)
+                try:
+                    verified_badge = post_container.find_element(By.CSS_SELECTOR, "svg[class*='verified'], [data-verified='true'], .verified-badge")
+                    metadata["creator"]["verified"] = True
+                except:
+                    pass
+                    
+            except Exception as e:
+                print(f"   ⚠️  Erreur extraction créateur: {e}")
+            
+            # 2. EXTRAIRE LA DESCRIPTION / PROMPT
+            try:
+                description_selectors = [
+                    "[data-description]",
+                    ".description",
+                    ".prompt",
+                    ".caption",
+                    "p[class*='description']",
+                    "div[class*='prompt']"
+                ]
+                
+                for selector in description_selectors:
+                    try:
+                        desc_elem = post_container.find_element(By.CSS_SELECTOR, selector)
+                        desc_text = desc_elem.text.strip()
+                        if desc_text:
+                            if "prompt" in selector.lower():
+                                metadata["content"]["prompt"] = desc_text
+                            else:
+                                metadata["content"]["description"] = desc_text
+                            break
+                    except:
+                        continue
+            except Exception as e:
+                print(f"   ⚠️  Erreur extraction description: {e}")
+            
+            # 3. EXTRAIRE LES ENGAGEMENTS (likes, comments, etc.)
+            try:
+                # Likes
+                like_selectors = [
+                    "button[aria-label*='like']",
+                    "button[aria-label*='Like']",
+                    "[data-likes]",
+                    ".like-count",
+                    "span[class*='like']"
+                ]
+                
+                for selector in like_selectors:
+                    try:
+                        like_elem = post_container.find_element(By.CSS_SELECTOR, selector)
+                        like_text = like_elem.text.strip()
+                        # Extraire le nombre
+                        likes = self._parse_count(like_text)
+                        if likes > 0:
+                            metadata["engagement"]["likes"] = likes
+                            break
+                    except:
+                        continue
+                
+                # Comments count
+                comment_count_selectors = [
+                    "button[aria-label*='comment']",
+                    "[data-comments]",
+                    ".comment-count",
+                    "span[class*='comment']"
+                ]
+                
+                for selector in comment_count_selectors:
+                    try:
+                        comment_elem = post_container.find_element(By.CSS_SELECTOR, selector)
+                        comment_text = comment_elem.text.strip()
+                        comments = self._parse_count(comment_text)
+                        if comments > 0:
+                            metadata["engagement"]["comments_count"] = comments
+                            break
+                    except:
+                        continue
+                
+                # Remixes / Shares
+                remix_selectors = [
+                    "[data-remixes]",
+                    ".remix-count",
+                    "button[aria-label*='remix']"
+                ]
+                
+                for selector in remix_selectors:
+                    try:
+                        remix_elem = post_container.find_element(By.CSS_SELECTOR, selector)
+                        remix_text = remix_elem.text.strip()
+                        remixes = self._parse_count(remix_text)
+                        if remixes > 0:
+                            metadata["engagement"]["remixes"] = remixes
+                            break
+                    except:
+                        continue
+                        
+            except Exception as e:
+                print(f"   ⚠️  Erreur extraction engagements: {e}")
+            
+            # 4. EXTRAIRE LES COMMENTAIRES
+            try:
+                comments = []
+                comment_selectors = [
+                    ".comment",
+                    "[data-comment]",
+                    "div[class*='comment-item']"
+                ]
+                
+                for selector in comment_selectors:
+                    try:
+                        comment_elements = post_container.find_elements(By.CSS_SELECTOR, selector)[:10]  # Max 10 commentaires
+                        
+                        for comment_elem in comment_elements:
+                            comment_data = {
+                                "author": None,
+                                "text": None,
+                                "likes": 0,
+                                "timestamp": None
+                            }
+                            
+                            try:
+                                # Auteur du commentaire
+                                author_elem = comment_elem.find_element(By.CSS_SELECTOR, ".comment-author, [class*='author'], a[href*='/profile']")
+                                comment_data["author"] = author_elem.text.strip()
+                            except:
+                                pass
+                            
+                            try:
+                                # Texte du commentaire
+                                text_elem = comment_elem.find_element(By.CSS_SELECTOR, ".comment-text, p, span[class*='text']")
+                                comment_data["text"] = text_elem.text.strip()
+                            except:
+                                pass
+                            
+                            try:
+                                # Likes du commentaire
+                                like_elem = comment_elem.find_element(By.CSS_SELECTOR, ".comment-likes, [class*='like']")
+                                comment_data["likes"] = self._parse_count(like_elem.text)
+                            except:
+                                pass
+                            
+                            if comment_data["text"]:
+                                comments.append(comment_data)
+                        
+                        if comments:
+                            metadata["comments"] = comments
+                            break
+                            
+                    except:
+                        continue
+                        
+            except Exception as e:
+                print(f"   ⚠️  Erreur extraction commentaires: {e}")
+            
+            # 5. EXTRAIRE POST URL
+            try:
+                # Chercher le lien du post
+                post_link = post_container.find_element(By.CSS_SELECTOR, "a[href*='/p/']")
+                metadata["metadata"]["post_url"] = post_link.get_attribute("href")
+            except:
+                pass
+            
+            # 6. EXTRAIRE THUMBNAIL
+            try:
+                # Le poster de la vidéo ou une image de prévisualisation
+                poster = video_element.get_attribute("poster")
+                if poster:
+                    metadata["media"]["thumbnail_url"] = poster
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"   ❌ Erreur extraction métadonnées: {e}")
+        
+        return metadata
+    
+    def _generate_video_id(self, video_url):
+        """Génère un ID unique pour une vidéo basé sur son URL."""
+        return hashlib.md5(video_url.encode()).hexdigest()[:16]
+    
+    def _parse_count(self, text):
+        """Parse un texte avec un nombre (ex: '1.2K', '500', '3M')."""
+        if not text:
+            return 0
+        
+        text = text.strip().upper()
+        # Enlever les caractères non numériques sauf K, M, B
+        import re
+        match = re.search(r'([\d.]+)\s*([KMB]?)', text)
+        
+        if not match:
+            return 0
+        
+        number = float(match.group(1))
+        suffix = match.group(2)
+        
+        multipliers = {'K': 1000, 'M': 1000000, 'B': 1000000000}
+        
+        if suffix in multipliers:
+            return int(number * multipliers[suffix])
+        
+        return int(number)
+    
+    def extract_and_save_metadata(self, video_urls, output_file='metadata.json', per_file=False, output_dir=None):
+        """
+        Extrait les métadonnées pour toutes les vidéos et les sauvegarde.
+        
+        Args:
+            video_urls (set/list): URLs des vidéos
+            output_file (str): Nom du fichier de sortie (si per_file=False)
+            per_file (bool): Si True, sauvegarde chaque vidéo dans un fichier séparé
+            output_dir (pathlib.Path): Dossier de sortie (pour mode per_file)
+            
+        Returns:
+            list: Liste des métadonnées extraites
+        """
+        print("="*60)
+        print("📋 EXTRACTION DES MÉTADONNÉES")
+        print("="*60)
+        print(f"🎯 Nombre de vidéos: {len(video_urls)}")
+        
+        if per_file:
+            if not output_dir:
+                output_dir = pathlib.Path("metadata")
+            output_dir.mkdir(exist_ok=True)
+            print(f"💾 Mode: Un fichier JSON par vidéo dans {output_dir.absolute()}")
+        else:
+            print(f"💾 Mode: Toutes les métadonnées dans {output_file}")
+        print()
+        
+        all_metadata = []
+        success_count = 0
+        fail_count = 0
+        
+        for i, video_url in enumerate(video_urls, 1):
+            print(f"[{i}/{len(video_urls)}] 🔍 Extraction des métadonnées...")
+            print(f"   URL: {video_url[:70]}...")
+            
+            try:
+                metadata = self.extract_video_metadata(video_url)
+                
+                # Afficher un résumé
+                creator = metadata['creator']['username'] or 'Inconnu'
+                description = metadata['content']['description'] or 'Aucune description'
+                likes = metadata['engagement']['likes']
+                comments_count = metadata['engagement']['comments_count']
+                num_comments = len(metadata['comments'])
+                
+                print(f"   ✅ Créateur: {creator}")
+                print(f"   ✅ Description: {description[:50]}{'...' if len(description) > 50 else ''}")
+                print(f"   ✅ Engagement: {likes} likes, {comments_count} commentaires ({num_comments} extraits)")
+                
+                all_metadata.append(metadata)
+                success_count += 1
+                
+                # Sauvegarder individuellement si demandé
+                if per_file and output_dir:
+                    video_id = metadata['video_id']
+                    json_filename = f"{video_id}.json"
+                    json_path = output_dir / json_filename
+                    
+                    with open(json_path, 'w', encoding='utf-8') as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                    
+                    print(f"   💾 Sauvegardé: {json_filename}")
+                
+                print()
+                
+            except Exception as e:
+                print(f"   ❌ Erreur: {e}")
+                fail_count += 1
+                print()
+        
+        # Sauvegarder toutes les métadonnées dans un seul fichier si mode normal
+        if not per_file:
+            output_path = pathlib.Path(output_file)
+            
+            # Structure optimisée pour import dans app TikTok-like
+            output_data = {
+                "version": "1.0",
+                "scraped_at": datetime.now().isoformat(),
+                "total_videos": len(all_metadata),
+                "source": "Sora (ChatGPT)",
+                "videos": all_metadata
+            }
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(output_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 Toutes les métadonnées sauvegardées dans: {output_path.absolute()}")
+        
+        print("\n" + "="*60)
+        print("📊 RÉSUMÉ DE L'EXTRACTION")
+        print("="*60)
+        print(f"✅ Métadonnées extraites avec succès: {success_count}")
+        print(f"❌ Échecs: {fail_count}")
+        
+        if per_file and output_dir:
+            print(f"📁 Fichiers JSON sauvegardés dans: {output_dir.absolute()}")
+        else:
+            print(f"📁 Fichier JSON sauvegardé: {pathlib.Path(output_file).absolute()}")
+        
+        print("="*60)
+        
+        return all_metadata
 def main():
     """Fonction principale avec CLI."""
     parser = argparse.ArgumentParser(
@@ -685,6 +1097,18 @@ Exemples d'utilisation:
 
   # Mode headless (sans interface graphique)
   python scraper_sora_advanced.py --mode home --num-videos 10 --headless
+  
+  # MODE MÉTADONNÉES: Extraire les infos détaillées (créateur, commentaires, etc.)
+  # Pour import dans une app TikTok-like
+  
+  # Extraire métadonnées de 20 vidéos d'un profil (toutes dans un seul JSON)
+  python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --num-videos 20 --metadata-mode
+  
+  # Extraire métadonnées avec un JSON par vidéo
+  python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --num-videos 20 --metadata-mode --metadata-per-file
+  
+  # Extraire TOUTES les métadonnées d'un profil avec session Chrome existante
+  python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --all --metadata-mode --use-existing-chrome --slow
         """
     )
     
@@ -752,6 +1176,25 @@ Exemples d'utilisation:
         type=int,
         default=9222,
         help='Port de débogage Chrome (défaut: 9222)'
+    )
+    
+    parser.add_argument(
+        '--metadata-mode',
+        action='store_true',
+        help='Mode extraction de métadonnées: collecte infos détaillées (créateur, description, commentaires) au lieu de télécharger'
+    )
+    
+    parser.add_argument(
+        '--metadata-output',
+        type=str,
+        default='metadata.json',
+        help='Fichier de sortie pour les métadonnées (défaut: metadata.json)'
+    )
+    
+    parser.add_argument(
+        '--metadata-per-file',
+        action='store_true',
+        help='Sauvegarder chaque vidéo dans un JSON séparé au lieu d\'un seul fichier'
     )
     
     args = parser.parse_args()
@@ -833,6 +1276,39 @@ Exemples d'utilisation:
             print(f"{i}. {url}")
         print("-"*60 + "\n")
         
+        # MODE MÉTADONNÉES: Extraire les métadonnées au lieu de télécharger
+        if args.metadata_mode:
+            print("📋 MODE MÉTADONNÉES ACTIVÉ")
+            print("   Extraction des informations détaillées pour chaque vidéo...")
+            print("   (créateur, description, commentaires, engagement, etc.)\n")
+            
+            # Extraire et sauvegarder les métadonnées
+            metadata_output_dir = dest_dir if args.metadata_per_file else None
+            scraper.extract_and_save_metadata(
+                video_urls,
+                output_file=args.metadata_output,
+                per_file=args.metadata_per_file,
+                output_dir=metadata_output_dir
+            )
+            
+            # Fermer le navigateur
+            scraper.close()
+            scraper = None
+            
+            print("\n✅ Extraction des métadonnées terminée!")
+            print("\n💡 FORMAT DE SORTIE:")
+            print("   Les données sont structurées pour un import facile dans une app TikTok-like")
+            print("   Chaque vidéo contient:")
+            print("   - Informations créateur (username, avatar, profil)")
+            print("   - Description et prompt")
+            print("   - Statistiques d'engagement (likes, commentaires, partages)")
+            print("   - Liste des commentaires extraits")
+            print("   - URLs de la vidéo et thumbnail")
+            print("   - Métadonnées supplémentaires")
+            
+            return
+        
+        # MODE TÉLÉCHARGEMENT: Télécharger les vidéos
         # Fermer le navigateur avant de télécharger
         scraper.close()
         scraper = None
