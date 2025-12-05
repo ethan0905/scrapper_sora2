@@ -9,7 +9,7 @@ Sora bloque les requêtes simples car le site nécessite :
 - ✅ JavaScript pour charger le contenu dynamique
 - ✅ Headers de navigateur réalistes
 
-## 📦 Deux versions disponibles
+## 📦 Trois versions disponibles
 
 ### **Version 1 : Simple (requests + BeautifulSoup)**
 - ✅ Rapide et léger
@@ -18,13 +18,22 @@ Sora bloque les requêtes simples car le site nécessite :
 
 **Fichier :** `scraper_videos.py`
 
-### **Version 2 : Avancée (Selenium) - RECOMMANDÉ**
+### **Version 2 : Selenium de base**
 - ✅ Automatise un vrai navigateur Chrome
 - ✅ Gère l'authentification ChatGPT
 - ✅ Charge le JavaScript dynamique
 - ✅ Scrolle pour charger les vidéos lazy-loaded
 
 **Fichier :** `scraper_videos_selenium.py`
+
+### **Version 3 : Avancée avec CLI - ⭐ RECOMMANDÉ**
+- ✅ **2 modes de scraping** : Homepage ou Profil utilisateur
+- ✅ **Contrôle total** : nombre de vidéos et délai personnalisables
+- ✅ **Interface CLI** : ligne de commande intuitive
+- ✅ **Nommage intelligent** : vidéos numérotées automatiquement
+- ✅ **Architecture modulaire** : classe réutilisable
+
+**Fichier :** `scraper_sora_advanced.py`
 
 ---
 
@@ -46,7 +55,39 @@ pip install -r requirements.txt
 
 ## 🎯 Utilisation
 
-### **Méthode recommandée : Selenium**
+### **⭐ Méthode recommandée : Version avancée avec CLI**
+
+#### **Mode 1 : Scraper la page d'accueil**
+```bash
+python scraper_sora_advanced.py --mode home --num-videos 20 --delay 2
+```
+
+#### **Mode 2 : Scraper un profil utilisateur**
+```bash
+python scraper_sora_advanced.py --mode profile \
+  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
+  --num-videos 15 \
+  --delay 2
+```
+
+**Paramètres disponibles :**
+- `--mode` : `home` (page d'accueil) ou `profile` (profil utilisateur)
+- `--num-videos` : Nombre de vidéos à télécharger (défaut: 10)
+- `--delay` : Délai entre chaque scroll en secondes (défaut: 2.0)
+- `--profile-url` : URL du profil (requis pour mode `profile`)
+- `--output-dir` : Dossier de destination (défaut: `videos`)
+- `--headless` : Mode sans interface graphique
+
+**📖 Guide détaillé :** Voir `USAGE_GUIDE.md`
+
+**💡 Exemples prêts à l'emploi :**
+```bash
+./examples.sh  # Affiche tous les exemples
+```
+
+---
+
+### **Alternative : Selenium de base**
 
 ```bash
 python scraper_videos_selenium.py
@@ -58,11 +99,6 @@ python scraper_videos_selenium.py
 3. 📜 Le script scrolle pour charger les vidéos
 4. 🔍 Extraction des URLs de vidéos
 5. 📥 Téléchargement automatique dans `videos/`
-
-**Configuration :**
-- Modifiez `BASE_URL` dans le script
-- Ajustez `WAIT_TIME` si la page est lente
-- `HEADLESS = True` pour mode invisible
 
 ---
 
@@ -103,10 +139,14 @@ WAIT_TIME = 10  # Temps d'attente (secondes)
 ```
 scrapper_sora2/
 ├── scraper_videos.py              # Version simple (requests)
-├── scraper_videos_selenium.py     # Version Selenium (RECOMMANDÉ)
+├── scraper_videos_selenium.py     # Version Selenium de base
+├── scraper_sora_advanced.py       # ⭐ Version avancée avec CLI (RECOMMANDÉ)
 ├── requirements.txt               # Dépendances version simple
 ├── requirements_selenium.txt      # Dépendances Selenium
 ├── get_cookies_guide.md          # Guide cookies
+├── USAGE_GUIDE.md                # 📖 Guide complet d'utilisation
+├── QUICK_START.md                # ⚡ Démarrage rapide
+├── examples.sh                    # 💡 Exemples de commandes
 ├── README.md                      # Ce fichier
 └── videos/                        # Vidéos téléchargées (créé auto)
 ```
