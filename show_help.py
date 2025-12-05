@@ -38,6 +38,11 @@ QUICK_EXAMPLES = """
       python scraper_sora_advanced.py --mode profile \\
         --profile-url "https://sora.chatgpt.com/user/USERNAME" \\
         --num-videos 15 --delay 2
+
+  4️⃣  🌟 TOUT un profil en mode SLOW (RECOMMANDÉ):
+      python scraper_sora_advanced.py --mode profile \\
+        --profile-url "https://sora.chatgpt.com/user/USERNAME" \\
+        --all --slow
 """
 
 PARAMETERS = """
@@ -45,7 +50,9 @@ PARAMETERS = """
 
   --mode {home,profile}     Mode de scraping (REQUIS)
   --num-videos N            Nombre de vidéos (défaut: 10)
+  --all                     🌟 Scraper TOUTES les vidéos
   --delay SECONDS           Délai entre scrolls (défaut: 2.0)
+  --slow                    🐌 Mode lent anti-ban (delay 5s + pauses)
   --profile-url URL         URL du profil (requis si mode=profile)
   --output-dir DIR          Dossier destination (défaut: videos)
   --headless                Mode sans interface graphique
@@ -55,10 +62,14 @@ TIPS = """
 💡 CONSEILS:
 
   ✅ Commencez avec 5 vidéos pour tester
-  ✅ Utilisez --delay 2 (bon équilibre)
+  ✅ Utilisez --slow pour éviter les bans (> 20 vidéos)
+  ✅ Utilisez --all --slow pour un profil complet
   ✅ Augmentez --delay si vidéos manquantes
   ✅ Vérifiez page_backup.html si problème
   ✅ Connectez-vous manuellement si demandé
+  
+  🌟 RECOMMANDÉ pour archivage:
+     --all --slow (sécurisé mais lent)
 """
 
 DOCS = """
@@ -67,8 +78,9 @@ DOCS = """
   📖 START_HERE.md          → Commencez ici !
   📖 USAGE_GUIDE.md         → Guide complet
   📖 MODES_COMPARISON.md    → Comparaison des modes
-  💡 examples.sh            → Tous les exemples
-  ⚡ QUICK_START.md         → Démarrage rapide
+  � SLOW_MODE_GUIDE.md     → 🌟 Guide --all --slow
+  �💡 examples.sh            → Tous les exemples
+  ⚡ QUICK_COMMANDS_SLOW.md → Commandes rapides
 """
 
 HELP_CMD = """

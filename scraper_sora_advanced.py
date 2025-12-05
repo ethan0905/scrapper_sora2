@@ -28,48 +28,75 @@ HEADLESS = False  # False = voir le navigateur, True = mode invisible
 class SoraScraper:
     """Classe principale pour scraper Sora avec différents modes."""
     
-    def __init__(self, headless=False):
+    def __init__(self, headless=False, use_existing_chrome=False, debug_port=9222):
         self.driver = None
         self.headless = headless
+        self.use_existing_chrome = use_existing_chrome
+        self.debug_port = debug_port
         
     def create_driver(self):
         """
         Crée un driver Selenium configuré pour Chrome.
+        Peut soit créer une nouvelle instance, soit se connecter à une session existante.
         
         Returns:
             webdriver.Chrome: Le driver Selenium
         """
-        print("🚀 Initialisation du navigateur Chrome...")
-        
         chrome_options = Options()
         
-        if self.headless:
-            chrome_options.add_argument("--headless")
-        
-        # Options pour éviter la détection
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--window-size=1920,1080")
-        
-        # User agent
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        
-        # Créer le service et le driver
-        service = Service(ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        # Masquer l'automatisation
-        self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-            "userAgent": 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
-        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        print("✅ Navigateur prêt\n")
-        return self.driver
+        if self.use_existing_chrome:
+            # Se connecter à une session Chrome existante
+            print("� Connexion à votre session Chrome existante...")
+            print(f"   Port de débogage: {self.debug_port}")
+            print("\n💡 Si Chrome n'est pas ouvert avec remote debugging, lancez:")
+            print(f'   /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={self.debug_port} --user-data-dir="$HOME/chrome-selenium-profile"')
+            print()
+            
+            chrome_options.add_experimental_option("debuggerAddress", f"127.0.0.1:{self.debug_port}")
+            
+            try:
+                # Pas besoin de ChromeDriverManager pour une session existante
+                service = Service(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                print("✅ Connecté à Chrome existant!\n")
+                return self.driver
+            except Exception as e:
+                print(f"❌ Impossible de se connecter à Chrome: {e}")
+                print("\n💡 Assurez-vous que Chrome est lancé avec --remote-debugging-port")
+                print("   Lancez cette commande dans un terminal:")
+                print(f'   /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={self.debug_port} --user-data-dir="$HOME/chrome-selenium-profile"')
+                raise
+        else:
+            # Créer une nouvelle instance Chrome
+            print("🚀 Création d'une nouvelle session Chrome...")
+            
+            if self.headless:
+                chrome_options.add_argument("--headless")
+            
+            # Options pour éviter la détection
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--window-size=1920,1080")
+            
+            # User agent
+            chrome_options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            
+            # Créer le service et le driver
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            # Masquer l'automatisation
+            self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+                "userAgent": 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            print("✅ Navigateur prêt\n")
+            return self.driver
     
     def wait_for_login(self):
         """Attend que l'utilisateur se connecte si nécessaire."""
@@ -90,33 +117,99 @@ class SoraScraper:
             print(f"📍 URL après connexion: {self.driver.current_url}\n")
             time.sleep(2)  # Petit délai pour stabiliser
     
-    def scroll_and_load(self, num_scrolls=5, delay=2):
+    def scroll_and_load(self, num_scrolls=5, delay=2, all_mode=False):
         """
         Fait défiler la page pour charger les vidéos lazy-loaded.
+        
+        IMPORTANT: Collecte les URLs PENDANT le scroll pour contourner le virtual scrolling.
+        Sora utilise un système de virtualisation React qui ne garde que ~6 vidéos dans le DOM.
         
         Args:
             num_scrolls (int): Nombre de scrolls à effectuer
             delay (float): Délai entre chaque scroll en secondes
+            all_mode (bool): Si True, continue jusqu'à la fin réelle du contenu
+            
+        Returns:
+            set: Ensemble d'URLs de vidéos collectées pendant le scroll
         """
-        print(f"📜 Scrolling de la page ({num_scrolls} fois, délai: {delay}s)...")
+        if all_mode:
+            print(f"📜 Scrolling en mode ALL (jusqu'à la fin du contenu, délai: {delay}s)...")
+            max_no_change = 5  # Plus tolérant en mode ALL
+        else:
+            print(f"📜 Scrolling de la page (max {num_scrolls} fois, délai: {delay}s)...")
+            max_no_change = 3  # Normal
         
+        print("   🎯 Collection des URLs pendant le scroll (contournement du virtual scrolling)...")
+        
+        collected_urls = set()
         last_height = self.driver.execute_script("return document.body.scrollHeight")
+        no_change_count = 0  # Compteur pour détecter la fin
+        scroll_count = 0
         
-        for i in range(num_scrolls):
+        while True:
+            scroll_count += 1
+            
+            # COLLECTER les URLs AVANT de scroller (vidéos dans le viewport actuel)
+            try:
+                video_elements = self.driver.find_elements(By.TAG_NAME, "video")
+                for video in video_elements:
+                    try:
+                        src = video.get_attribute("src")
+                        if src and src not in collected_urls:
+                            collected_urls.add(src)
+                    except:
+                        pass
+            except:
+                pass
+            
+            # Vérifier si on a atteint la limite (sauf en mode ALL)
+            if not all_mode and scroll_count > num_scrolls:
+                print(f"   ℹ️  Limite de {num_scrolls} scrolls atteinte")
+                break
+            
             # Scroller jusqu'en bas
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(delay)
             
             # Vérifier si la hauteur a changé (nouveau contenu chargé)
             new_height = self.driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                print(f"   ⚠️ Plus de contenu à charger après {i+1} scrolls")
-                break
             
-            last_height = new_height
-            print(f"   Scroll {i+1}/{num_scrolls} effectué")
+            if new_height == last_height:
+                no_change_count += 1
+                print(f"   ⚠️ Pas de nouveau contenu (tentative {no_change_count}/{max_no_change}) - {len(collected_urls)} URLs collectées")
+                
+                # Si N scrolls consécutifs sans changement, on arrête
+                if no_change_count >= max_no_change:
+                    print(f"   ✅ Fin du contenu atteinte après {scroll_count} scrolls")
+                    break
+            else:
+                no_change_count = 0  # Réinitialiser si du contenu est chargé
+                last_height = new_height
+                if all_mode:
+                    print(f"   Scroll {scroll_count} effectué - Nouveau contenu chargé - {len(collected_urls)} URLs")
+                else:
+                    print(f"   Scroll {scroll_count}/{num_scrolls} effectué - Nouveau contenu chargé - {len(collected_urls)} URLs")
+            
+            # Sécurité : limite absolue même en mode ALL
+            if scroll_count >= 500:
+                print(f"   ⚠️ Limite de sécurité atteinte (500 scrolls)")
+                break
         
-        print("✅ Scrolling terminé\n")
+        # DERNIÈRE collecte après le dernier scroll
+        try:
+            video_elements = self.driver.find_elements(By.TAG_NAME, "video")
+            for video in video_elements:
+                try:
+                    src = video.get_attribute("src")
+                    if src and src not in collected_urls:
+                        collected_urls.add(src)
+                except:
+                    pass
+        except:
+            pass
+        
+        print(f"✅ Scrolling terminé - {len(collected_urls)} URLs collectées au total\n")
+        return collected_urls
     
     def extract_video_elements(self, max_videos=None):
         """
@@ -253,13 +346,14 @@ class SoraScraper:
         
         return video_urls
     
-    def scrape_homepage(self, num_videos=10, scroll_delay=2):
+    def scrape_homepage(self, num_videos=10, scroll_delay=2, all_mode=False):
         """
         Mode 1: Scrape la page d'accueil de Sora.
         
         Args:
             num_videos (int): Nombre de vidéos à scraper
             scroll_delay (float): Délai entre chaque scroll
+            all_mode (bool): Si True, scrape jusqu'à la fin du contenu
             
         Returns:
             set: Ensemble d'URLs de vidéos
@@ -270,7 +364,10 @@ class SoraScraper:
         print("🏠 MODE 1: SCRAPING DE LA PAGE D'ACCUEIL")
         print("="*60)
         print(f"📍 URL: {url}")
-        print(f"🎯 Nombre de vidéos: {num_videos}")
+        if all_mode:
+            print(f"🎯 Mode: TOUTES les vidéos (♾️)")
+        else:
+            print(f"🎯 Nombre de vidéos: {num_videos}")
         print(f"⏱️  Délai entre scrolls: {scroll_delay}s\n")
         
         # Créer le driver si nécessaire
@@ -286,26 +383,38 @@ class SoraScraper:
         self.wait_for_login()
         
         # Calculer le nombre de scrolls nécessaires (environ 3-5 vidéos par scroll)
-        num_scrolls = max(5, (num_videos // 3) + 2)
+        if all_mode:
+            num_scrolls = 500  # Grande valeur pour le mode ALL
+        else:
+            num_scrolls = max(5, (num_videos // 3) + 2)
         
-        # Scroller pour charger les vidéos
-        self.scroll_and_load(num_scrolls=num_scrolls, delay=scroll_delay)
+        # Scroller ET collecter les vidéos (important pour le virtual scrolling!)
+        video_urls = self.scroll_and_load(num_scrolls=num_scrolls, delay=scroll_delay, all_mode=all_mode)
         
-        # Extraire les éléments vidéo
+        print(f"📊 URLs collectées pendant le scroll: {len(video_urls)}")
+        
+        # Fallback: extraire aussi les éléments restants dans le viewport final
         elements = self.extract_video_elements(max_videos=num_videos)
+        fallback_urls = self.extract_video_urls_from_elements(elements)
         
-        # Extraire les URLs
-        video_urls = self.extract_video_urls_from_elements(elements)
+        # Combiner les deux ensembles
+        original_count = len(video_urls)
+        video_urls.update(fallback_urls)
         
-        # Backup: parser le HTML
+        if len(video_urls) > original_count:
+            print(f"📊 URLs additionnelles trouvées dans le viewport final: {len(video_urls) - original_count}")
+        
+        print(f"✅ Total final: {len(video_urls)} URLs uniques\n")
+        
+        # Backup: parser le HTML (au cas où)
         if not video_urls:
-            print("⚠️ Aucune URL trouvée avec Selenium, tentative avec BeautifulSoup...")
+            print("⚠️ Aucune URL trouvée, tentative avec BeautifulSoup...")
             html = self.driver.page_source
             video_urls = self.extract_all_video_urls(html, url)
         
         return video_urls
     
-    def scrape_user_profile(self, profile_url, num_videos=10, scroll_delay=2):
+    def scrape_user_profile(self, profile_url, num_videos=10, scroll_delay=2, all_mode=False):
         """
         Mode 2: Scrape le profil d'un utilisateur spécifique.
         
@@ -313,6 +422,7 @@ class SoraScraper:
             profile_url (str): URL du profil utilisateur
             num_videos (int): Nombre de vidéos à scraper
             scroll_delay (float): Délai entre chaque scroll
+            all_mode (bool): Si True, scrape jusqu'à la fin du contenu
             
         Returns:
             set: Ensemble d'URLs de vidéos
@@ -321,7 +431,10 @@ class SoraScraper:
         print("👤 MODE 2: SCRAPING D'UN PROFIL UTILISATEUR")
         print("="*60)
         print(f"📍 URL demandée: {profile_url}")
-        print(f"🎯 Nombre de vidéos: {num_videos}")
+        if all_mode:
+            print(f"🎯 Mode: TOUTES les vidéos (♾️)")
+        else:
+            print(f"🎯 Nombre de vidéos: {num_videos}")
         print(f"⏱️  Délai entre scrolls: {scroll_delay}s\n")
         
         # Créer le driver si nécessaire
@@ -390,20 +503,32 @@ class SoraScraper:
         time.sleep(3)
         
         # Calculer le nombre de scrolls
-        num_scrolls = max(5, (num_videos // 3) + 2)
+        if all_mode:
+            num_scrolls = 500  # Grande valeur pour le mode ALL
+        else:
+            num_scrolls = max(5, (num_videos // 3) + 2)
         
-        # Scroller pour charger les vidéos
-        self.scroll_and_load(num_scrolls=num_scrolls, delay=scroll_delay)
+        # Scroller ET collecter les vidéos (important pour le virtual scrolling!)
+        video_urls = self.scroll_and_load(num_scrolls=num_scrolls, delay=scroll_delay, all_mode=all_mode)
         
-        # Extraire les éléments vidéo
+        print(f"📊 URLs collectées pendant le scroll: {len(video_urls)}")
+        
+        # Fallback: extraire aussi les éléments restants dans le viewport final
         elements = self.extract_video_elements(max_videos=num_videos)
+        fallback_urls = self.extract_video_urls_from_elements(elements)
         
-        # Extraire les URLs
-        video_urls = self.extract_video_urls_from_elements(elements)
+        # Combiner les deux ensembles
+        original_count = len(video_urls)
+        video_urls.update(fallback_urls)
         
-        # Backup: parser le HTML avec l'URL ACTUELLE (pas celle demandée)
+        if len(video_urls) > original_count:
+            print(f"📊 URLs additionnelles trouvées dans le viewport final: {len(video_urls) - original_count}")
+        
+        print(f"✅ Total final: {len(video_urls)} URLs uniques\n")
+        
+        # Backup: parser le HTML (au cas où)
         if not video_urls:
-            print("⚠️ Aucune URL trouvée avec Selenium, tentative avec BeautifulSoup...")
+            print("⚠️ Aucune URL trouvée, tentative avec BeautifulSoup...")
             html = self.driver.page_source
             # Utiliser l'URL actuelle du navigateur, pas celle demandée
             video_urls = self.extract_all_video_urls(html, self.driver.current_url)
@@ -552,6 +677,12 @@ Exemples d'utilisation:
   # Mode 2: Scraper 15 vidéos d'un profil utilisateur
   python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --num-videos 15
 
+  # Mode 3: Scraper TOUTES les vidéos d'un profil en mode SLOW (recommandé)
+  python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --all --slow
+
+  # Mode 4: Scraper un profil en mode lent sans tout prendre
+  python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --num-videos 50 --slow
+
   # Mode headless (sans interface graphique)
   python scraper_sora_advanced.py --mode home --num-videos 10 --headless
         """
@@ -569,7 +700,13 @@ Exemples d'utilisation:
         '--num-videos',
         type=int,
         default=10,
-        help='Nombre de vidéos à télécharger (défaut: 10)'
+        help='Nombre de vidéos à télécharger (défaut: 10, utilisez "all" pour tout scraper)'
+    )
+    
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Scraper TOUTES les vidéos disponibles (peut prendre beaucoup de temps)'
     )
     
     parser.add_argument(
@@ -577,6 +714,12 @@ Exemples d'utilisation:
         type=float,
         default=2.0,
         help='Délai entre chaque scroll en secondes (défaut: 2.0)'
+    )
+    
+    parser.add_argument(
+        '--slow',
+        action='store_true',
+        help='Mode lent pour éviter les bans (delay 5s, scrolls limités, pauses aléatoires)'
     )
     
     parser.add_argument(
@@ -598,11 +741,43 @@ Exemples d'utilisation:
         help='Mode sans interface graphique'
     )
     
+    parser.add_argument(
+        '--use-existing-chrome',
+        action='store_true',
+        help='Se connecter à une session Chrome existante (reste connecté entre les exécutions)'
+    )
+    
+    parser.add_argument(
+        '--debug-port',
+        type=int,
+        default=9222,
+        help='Port de débogage Chrome (défaut: 9222)'
+    )
+    
     args = parser.parse_args()
     
     # Validation
     if args.mode == 'profile' and not args.profile_url:
         parser.error("--profile-url est requis pour le mode 'profile'")
+    
+    if args.all and args.num_videos != 10:
+        parser.error("Ne spécifiez pas --num-videos avec --all")
+    
+    # Appliquer le mode slow
+    if args.slow:
+        original_delay = args.delay
+        args.delay = max(5.0, args.delay)  # Minimum 5s en mode slow
+        print("🐌 MODE SLOW activé:")
+        print(f"   - Délai entre scrolls: {args.delay}s (au lieu de {original_delay}s)")
+        print(f"   - Pauses aléatoires: activées")
+        print(f"   - Scrolling plus prudent")
+        print(f"   - Recommandé pour éviter les détections/bans\n")
+    
+    # Gérer le mode --all
+    if args.all:
+        args.num_videos = 999999  # Très grand nombre pour scraper tout
+        print("♾️  MODE ALL activé: scraping de TOUTES les vidéos disponibles")
+        print("   ⚠️  Cela peut prendre BEAUCOUP de temps\n")
     
     # Configuration
     dest_dir = pathlib.Path(args.output_dir)
@@ -617,19 +792,25 @@ Exemples d'utilisation:
     
     try:
         # Créer le scraper
-        scraper = SoraScraper(headless=args.headless)
+        scraper = SoraScraper(
+            headless=args.headless,
+            use_existing_chrome=args.use_existing_chrome,
+            debug_port=args.debug_port
+        )
         
-        # Exécuter le mode approprié
+        # Exécuter le mode approprié avec paramètres
         if args.mode == 'home':
             video_urls = scraper.scrape_homepage(
                 num_videos=args.num_videos,
-                scroll_delay=args.delay
+                scroll_delay=args.delay,
+                all_mode=args.all
             )
         else:  # mode == 'profile'
             video_urls = scraper.scrape_user_profile(
                 profile_url=args.profile_url,
                 num_videos=args.num_videos,
-                scroll_delay=args.delay
+                scroll_delay=args.delay,
+                all_mode=args.all
             )
         
         # Sauvegarder le HTML
@@ -661,12 +842,24 @@ Exemples d'utilisation:
         success_count = 0
         fail_count = 0
         
+        # Créer un scraper temporaire pour les téléchargements
+        temp_scraper = SoraScraper()
+        
         for i, url in enumerate(video_urls, 1):
             print(f"[{i}/{len(video_urls)}]")
-            if scraper.download_file(url, dest_dir, index=i) if scraper else SoraScraper().download_file(url, dest_dir, index=i):
+            
+            # Télécharger
+            if temp_scraper.download_file(url, dest_dir, index=i):
                 success_count += 1
             else:
                 fail_count += 1
+            
+            # Mode slow : pause aléatoire entre téléchargements
+            if args.slow and i < len(video_urls):
+                import random
+                pause = random.uniform(3, 7)  # Entre 3 et 7 secondes
+                print(f"🐌 Pause de {pause:.1f}s pour éviter la détection...")
+                time.sleep(pause)
         
         # Résumé final
         print("="*60)
