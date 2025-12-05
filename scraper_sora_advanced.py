@@ -73,15 +73,22 @@ class SoraScraper:
     
     def wait_for_login(self):
         """Attend que l'utilisateur se connecte si nécessaire."""
-        if "login" in self.driver.current_url.lower() or "auth" in self.driver.current_url.lower():
+        current_url = self.driver.current_url.lower()
+        
+        # Vérifier si on est sur une page de connexion
+        if any(keyword in current_url for keyword in ["login", "auth", "signin", "sign-in"]):
             print("\n" + "="*60)
             print("🔐 CONNEXION REQUISE")
             print("="*60)
             print("Le site nécessite une authentification.")
+            print(f"URL actuelle: {self.driver.current_url}")
             print("\n👉 Veuillez vous connecter manuellement dans le navigateur.")
-            print("👉 Appuyez sur ENTRÉE une fois connecté et que la page est chargée...")
+            print("👉 Naviguez vers la page souhaitée si nécessaire.")
+            print("👉 Appuyez sur ENTRÉE une fois connecté et sur la bonne page...")
             input()
-            print("\n✅ Reprise du scraping...\n")
+            print("\n✅ Reprise du scraping...")
+            print(f"📍 URL après connexion: {self.driver.current_url}\n")
+            time.sleep(2)  # Petit délai pour stabiliser
     
     def scroll_and_load(self, num_scrolls=5, delay=2):
         """
@@ -313,7 +320,7 @@ class SoraScraper:
         print("="*60)
         print("👤 MODE 2: SCRAPING D'UN PROFIL UTILISATEUR")
         print("="*60)
-        print(f"📍 URL: {profile_url}")
+        print(f"📍 URL demandée: {profile_url}")
         print(f"🎯 Nombre de vidéos: {num_videos}")
         print(f"⏱️  Délai entre scrolls: {scroll_delay}s\n")
         
@@ -321,13 +328,66 @@ class SoraScraper:
         if not self.driver:
             self.create_driver()
         
-        # Charger la page
+        # Charger la page du profil
         print(f"🌐 Chargement du profil...")
         self.driver.get(profile_url)
         time.sleep(5)  # Attente initiale
         
-        # Vérifier si connexion nécessaire
+        # Vérifier l'URL actuelle après chargement
+        current_url = self.driver.current_url
+        print(f"📍 URL actuelle: {current_url}")
+        
+        # Vérifier si on a été redirigé vers la page de connexion
         self.wait_for_login()
+        
+        # Re-vérifier l'URL après connexion potentielle
+        current_url = self.driver.current_url
+        print(f"📍 URL finale: {current_url}")
+        
+        # Détecter le type de page
+        page_type = self._detect_page_type()
+        print(f"🔍 Type de page détecté: {page_type}")
+        
+        # Vérifier qu'on est bien sur le profil demandé
+        if profile_url not in current_url and not self._is_similar_url(profile_url, current_url):
+            print("\n⚠️  ATTENTION: L'URL actuelle ne correspond pas à l'URL demandée!")
+            print(f"   Demandée: {profile_url}")
+            print(f"   Actuelle: {current_url}")
+            
+            # Si on est sur la homepage au lieu du profil, c'est un problème
+            if page_type == "homepage":
+                print("\n❌ ERREUR: Vous êtes sur la page d'accueil, pas sur le profil!")
+                print("\n💡 Tentative de navigation vers le bon profil...")
+                
+                # Essayer de naviguer à nouveau
+                self.driver.get(profile_url)
+                time.sleep(5)
+                
+                current_url = self.driver.current_url
+                page_type = self._detect_page_type()
+                print(f"📍 Nouvelle URL: {current_url}")
+                print(f"🔍 Type de page: {page_type}")
+                
+                if page_type != "profile":
+                    print("\n❌ Impossible d'atteindre le profil demandé.")
+                    print("   Le site vous a redirigé vers une autre page.")
+                    print("\n💡 Conseils:")
+                    print("   1. Vérifiez que l'URL du profil est correcte")
+                    print("   2. Le profil existe-t-il vraiment ?")
+                    print("   3. Êtes-vous connecté avec un compte valide ?")
+                    print("   4. Le profil est-il privé ou bloqué ?")
+                    print("\n⚠️  Continuation du scraping sur la page actuelle...")
+        
+        # Vérifier qu'on est sur un profil
+        if page_type != "profile":
+            print(f"\n⚠️  ATTENTION: Vous n'êtes pas sur une page de profil!")
+            print(f"   Type de page: {page_type}")
+            print(f"   URL: {current_url}")
+            print("\n   Les résultats peuvent ne pas être ceux attendus.")
+        
+        # Attendre que la page se stabilise
+        print("\n⏳ Attente du chargement complet de la page...")
+        time.sleep(3)
         
         # Calculer le nombre de scrolls
         num_scrolls = max(5, (num_videos // 3) + 2)
@@ -341,13 +401,50 @@ class SoraScraper:
         # Extraire les URLs
         video_urls = self.extract_video_urls_from_elements(elements)
         
-        # Backup: parser le HTML
+        # Backup: parser le HTML avec l'URL ACTUELLE (pas celle demandée)
         if not video_urls:
             print("⚠️ Aucune URL trouvée avec Selenium, tentative avec BeautifulSoup...")
             html = self.driver.page_source
-            video_urls = self.extract_all_video_urls(html, profile_url)
+            # Utiliser l'URL actuelle du navigateur, pas celle demandée
+            video_urls = self.extract_all_video_urls(html, self.driver.current_url)
         
         return video_urls
+    
+    def _is_similar_url(self, url1, url2):
+        """
+        Vérifie si deux URLs sont similaires (ignore les paramètres de requête).
+        
+        Args:
+            url1 (str): Première URL
+            url2 (str): Deuxième URL
+            
+        Returns:
+            bool: True si les URLs sont similaires
+        """
+        from urllib.parse import urlparse
+        
+        parsed1 = urlparse(url1)
+        parsed2 = urlparse(url2)
+        
+        # Comparer le domaine et le chemin (ignorer les query params)
+        return (parsed1.netloc == parsed2.netloc and 
+                parsed1.path.rstrip('/') == parsed2.path.rstrip('/'))
+    
+    def _detect_page_type(self):
+        """
+        Détecte le type de page actuelle (homepage, profil, etc.).
+        
+        Returns:
+            str: Type de page détecté
+        """
+        current_url = self.driver.current_url.lower()
+        
+        if "/user/" in current_url or "/profile/" in current_url or "/@" in current_url:
+            return "profile"
+        elif "/explore" in current_url or "/feed" in current_url:
+            return "homepage"
+        else:
+            return "unknown"
     
     def download_file(self, url, dest_dir, index=None):
         """
