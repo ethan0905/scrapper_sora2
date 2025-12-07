@@ -1,128 +1,254 @@
-# 🎬 Scraper de Vidéos Sora - Version Avancée
+# 🎬 Sora Video Scraper
 
-Un scraper Python puissant pour télécharger automatiquement vos vidéos depuis Sora (ChatGPT) **OU** extraire leurs métadonnées complètes pour import dans une app TikTok-like.
+A powerful Python tool to extract videos and metadata from Sora (ChatGPT). Extract complete video information for building TikTok-like apps, or download videos for archiving.
 
-## ✨ Nouveauté : Mode Métadonnées
+## ✨ Key Features
 
-🎉 **Nouveau !** Extrayez toutes les informations de chaque vidéo sans les télécharger :
-- 👤 Créateur (username, avatar, profil)
-- 📝 Description et prompt
-- 📊 Engagement (likes, commentaires, partages, vues)
-- 💬 Commentaires extraits
-- 🎬 URLs vidéo et thumbnail
-- ⏱️ Timestamps et métadonnées
-
-**Format JSON prêt pour import dans votre app !**
-
-[📖 Guide complet du Mode Métadonnées](METADATA_MODE.md) | [⚡ Quick Reference](METADATA_QUICK_REF.md)
-
-## 🚨 Problème résolu : Virtual Scrolling
-
-✅ **Corrigé !** Le scraper collecte maintenant **toutes** les vidéos même avec le virtual scrolling React de Sora.  
-[📖 En savoir plus](VIRTUAL_SCROLLING_FIX.md)
-
-## 📦 Fonctionnalités
-
-### **Version Avancée - ⭐ RECOMMANDÉ** (`scraper_sora_advanced.py`)
-
-#### 🎯 Deux modes de scraping
-1. **Homepage** : Page d'accueil de Sora
-2. **Profile** : Profil utilisateur spécifique
-
-#### 💾 Deux modes de sortie
-1. **Mode Téléchargement** : Télécharge les vidéos MP4
-2. **Mode Métadonnées** : Extrait les infos détaillées en JSON
-
-#### 🔧 Fonctionnalités avancées
-- ✅ **Virtual Scrolling Fix** : Collecte toutes les vidéos même avec React virtual scrolling
-- ✅ **Session Chrome existante** : Restez connecté entre les exécutions (plus de re-login !)
-- ✅ **Mode SLOW** : Évite la détection avec délais aléatoires
-- ✅ **Mode ALL** : Scrape jusqu'à la fin du contenu
-- ✅ **Contrôle total** : Nombre de vidéos, délais personnalisables
-- ✅ **Interface CLI intuitive**
-- ✅ **Nommage intelligent** : Vidéos numérotées automatiquement
-- ✅ **Architecture modulaire** : Classe réutilisable
-- ✅ **Backup HTML** : Sauvegarde automatique pour debug
+- 🎯 **Two scraping modes**: Homepage or user profile
+- 📊 **Metadata extraction**: Get creator info, engagement stats, comments, and more (JSON format)
+- 📥 **Video download**: Download actual MP4 files
+- 🔄 **Virtual scrolling fix**: Collects ALL videos (not just visible ones)
+- 🌐 **Chrome session reuse**: Stay logged in between runs (no repeated logins)
+- �� **Slow mode**: Random delays to avoid detection
+- 🖥️ **Interactive interface**: Beginner-friendly guided setup
 
 ---
 
-## 🚀 Installation
+## 🚀 Quick Start
 
-### Option A : Version Selenium (recommandée pour Sora)
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements_selenium.txt
 ```
 
-### Option B : Version simple (pour sites non-protégés)
+### 2. Run interactive mode (Easiest!)
 
 ```bash
-pip install -r requirements.txt
+./start.sh
+```
+
+Just answer a few questions and the scraper does the rest!
+
+### 3. Or use direct commands
+
+```bash
+# Test with 5 videos from homepage
+python scraper_sora_advanced.py --mode home --num-videos 5 --metadata-mode
+
+# Extract metadata from a user profile
+python scraper_sora_advanced.py \
+  --mode profile \
+  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
+  --num-videos 20 \
+  --metadata-mode
 ```
 
 ---
 
-## 🎯 Utilisation
+## 📋 Usage Modes
 
-### **⭐ Méthode recommandée : Version avancée avec CLI**
+### 🌟 Interactive Mode (Recommended for beginners)
 
-#### **📥 Mode Téléchargement (vidéos MP4)**
-
-##### **Exemple 1 : Scraper la page d'accueil**
 ```bash
-python scraper_sora_advanced.py --mode home --num-videos 20 --delay 2
+./start.sh
+# Or: python interactive_scraper.py
 ```
 
-##### **Exemple 2 : Scraper un profil utilisateur**
+The interactive interface will:
+- ✅ Guide you through all options step-by-step
+- ✅ Show relevant documentation links
+- ✅ Build commands automatically
+- ✅ Validate your inputs
+- ✅ Run the scraper for you
+
+### ⚡ Command Line Mode (For advanced users)
+
+Full control with CLI flags:
+
 ```bash
-python scraper_sora_advanced.py --mode profile \
+python scraper_sora_advanced.py [OPTIONS]
+```
+
+**Common Options:**
+- `--mode home|profile` - Scrape homepage or user profile
+- `--profile-url URL` - User profile URL (required for profile mode)
+- `--num-videos N` - Number of videos to scrape (default: 10)
+- `--all` - Scrape ALL available videos
+- `--metadata-mode` - Extract metadata instead of downloading videos
+- `--metadata-per-file` - Create one JSON file per video
+- `--metadata-output FILE` - Output filename (default: metadata.json)
+- `--use-existing-chrome` - Connect to existing Chrome session
+- `--slow` - Use slow mode with random delays (5-10s)
+- `--delay N` - Delay between scrolls in seconds (default: 2.0)
+- `--headless` - Run browser in headless mode
+- `--output-dir DIR` - Output directory (default: videos)
+
+**View all options:**
+```bash
+python scraper_sora_advanced.py --help
+```
+
+---
+
+## 📊 Metadata Mode
+
+Extract structured video information without downloading files - perfect for building apps!
+
+### What you get for each video:
+
+```json
+{
+  "video_id": "abc123",
+  "creator": {
+    "username": "johndoe",
+    "avatar_url": "https://...",
+    "profile_url": "https://...",
+    "verified": true
+  },
+  "content": {
+    "description": "Amazing sunset over ocean",
+    "prompt": "Cinematic shot of golden hour...",
+    "title": "Sunset Dreams"
+  },
+  "engagement": {
+    "likes": 1250,
+    "comments_count": 45,
+    "shares": 89,
+    "views": 5600,
+    "remixes": 12
+  },
+  "media": {
+    "video_url": "https://...",
+    "thumbnail_url": "https://...",
+    "duration": "00:05"
+  },
+  "comments": [
+    {
+      "author": "user123",
+      "author_avatar": "https://...",
+      "text": "Great work!",
+      "likes": 23,
+      "timestamp": "2 hours ago"
+    }
+  ],
+  "metadata": {
+    "created_at": "2025-12-05T10:30:00Z",
+    "scraped_at": "2025-12-07T14:20:00Z",
+    "post_url": "https://..."
+  }
+}
+```
+
+### Use cases:
+
+- 🎬 **TikTok-like apps** - Import complete video data
+- 📊 **Analytics dashboards** - Track engagement and trends
+- 🔍 **Search engines** - Index descriptions and prompts
+- 📈 **Trend analysis** - Monitor popularity over time
+- 💾 **Data archiving** - Store info without huge video files
+
+### Examples:
+
+```bash
+# Single JSON file with all videos
+python scraper_sora_advanced.py \
+  --mode profile \
   --profile-url "https://sora.chatgpt.com/user/USERNAME" \
-  --num-videos 15 \
-  --delay 2
+  --num-videos 50 \
+  --metadata-mode
+
+# One JSON file per video in metadata/ directory
+python scraper_sora_advanced.py \
+  --mode profile \
+  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
+  --all \
+  --metadata-mode \
+  --metadata-per-file
 ```
 
-##### **Exemple 3 : Scraper TOUTES les vidéos d'un profil (mode sécurisé)**
+---
+
+## 🌐 Using Existing Chrome Session
+
+Avoid repeated logins by connecting to an existing Chrome instance:
+
+### Setup (One time):
+
 ```bash
-# Étape 1 : Lancer Chrome avec remote debugging
+# 1. Launch Chrome with remote debugging
 ./launch_chrome.sh
 
-# Étape 2 : Se connecter à Sora dans Chrome
+# 2. Log in to Sora in that Chrome window
 
-# Étape 3 : Scraper tout le profil
-python scraper_sora_advanced.py --mode profile \
+# 3. Keep Chrome open
+```
+
+### Use the session:
+
+```bash
+python scraper_sora_advanced.py \
+  --mode profile \
+  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
+  --all \
+  --metadata-mode \
+  --use-existing-chrome \
+  --slow
+```
+
+**Benefits:**
+- ✅ No repeated logins
+- ✅ Faster startup
+- ✅ Keep your session active
+- ✅ Can run scraper multiple times
+
+---
+
+## 📥 Download Mode
+
+Download actual video files instead of just metadata:
+
+```bash
+# Download 20 videos from profile
+python scraper_sora_advanced.py \
+  --mode profile \
+  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
+  --num-videos 20 \
+  --output-dir my_videos
+
+# Download all videos (with slow mode)
+python scraper_sora_advanced.py \
+  --mode profile \
   --profile-url "https://sora.chatgpt.com/user/USERNAME" \
   --all \
   --slow \
   --use-existing-chrome
 ```
 
-#### **📋 Mode Métadonnées (JSON pour TikTok-like app)**
-
-##### **Exemple 1 : Extraire métadonnées de 20 vidéos (un seul JSON)**
-```bash
-python scraper_sora_advanced.py --mode profile \
-  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
-  --num-videos 20 \
-  --metadata-mode
+**Output:**
 ```
-**Sortie :** `metadata.json` avec toutes les vidéos
-
-##### **Exemple 2 : Un fichier JSON par vidéo**
-```bash
-python scraper_sora_advanced.py --mode profile \
-  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
-  --num-videos 30 \
-  --metadata-mode \
-  --metadata-per-file
+videos/
+├── video_001.mp4
+├── video_002.mp4
+├── video_003.mp4
+└── ...
 ```
-**Sortie :** Dossier `metadata/` avec `{video_id}.json` par vidéo
 
-##### **Exemple 3 : Extraction complète d'un profil (RECOMMANDÉ)**
+---
+
+## 🎯 Common Use Cases
+
+### 1. Quick test (5 videos)
 ```bash
-# Avec session Chrome existante pour éviter re-login
-./launch_chrome.sh  # Une seule fois
+python scraper_sora_advanced.py --mode home --num-videos 5 --metadata-mode
+```
 
-python scraper_sora_advanced.py --mode profile \
+### 2. Extract all metadata from a profile
+```bash
+./launch_chrome.sh  # First time only
+
+python scraper_sora_advanced.py \
+  --mode profile \
   --profile-url "https://sora.chatgpt.com/user/USERNAME" \
   --all \
   --metadata-mode \
@@ -131,281 +257,182 @@ python scraper_sora_advanced.py --mode profile \
   --slow
 ```
 
-**Paramètres disponibles :**
-- `--mode` : `home` (page d'accueil) ou `profile` (profil utilisateur)
-- `--num-videos` : Nombre de vidéos à scraper (défaut: 10)
-- `--all` : Scraper TOUTES les vidéos disponibles
-- `--delay` : Délai entre chaque scroll en secondes (défaut: 2.0)
-- `--slow` : Mode lent (5s min) pour éviter détection/ban
-- `--profile-url` : URL du profil (requis pour mode `profile`)
-- `--output-dir` : Dossier de destination (défaut: `videos`)
-- `--headless` : Mode sans interface graphique
-- `--use-existing-chrome` : Se connecter à Chrome existant (pas de re-login)
-- `--debug-port` : Port de débogage Chrome (défaut: 9222)
-- `--metadata-mode` : Extraire métadonnées au lieu de télécharger
-- `--metadata-output` : Fichier de sortie pour métadonnées (défaut: `metadata.json`)
-- `--metadata-per-file` : Un JSON par vidéo au lieu d'un seul fichier
-
-**📖 Guides détaillés :**
-- Mode Métadonnées complet : `METADATA_MODE.md`
-- Quick Reference : `METADATA_QUICK_REF.md`
-- Chrome existant : `USE_EXISTING_CHROME.md`
-- Fix Virtual Scrolling : `VIRTUAL_SCROLLING_FIX.md`
-
-**💡 Scripts de test :**
+### 3. Download videos for archiving
 ```bash
-./test_metadata_mode.sh    # Test le mode métadonnées
-./test_existing_chrome.sh   # Test Chrome remote debugging
-./run_test.sh              # Test complet
-```
-
----
-
-### **Alternative : Selenium de base**
-
-```bash
-python scraper_videos_selenium.py
-```
-
-**Ce qui va se passer :**
-1. 🌐 Chrome s'ouvre automatiquement
-2. 🔐 Si connexion requise : connectez-vous manuellement
-3. 📜 Le script scrolle pour charger les vidéos
-4. 🔍 Extraction des URLs de vidéos
-5. 📥 Téléchargement automatique dans `videos/`
-
----
-
-## 🍪 Alternative : Utiliser des cookies
-
-Si vous voulez éviter Selenium, récupérez vos cookies :
-
-1. **Ouvrez DevTools** (F12) sur sora.chatgpt.com
-2. **Onglet Application** → Cookies
-3. **Copiez** `__Secure-next-auth.session-token` et autres
-4. **Ajoutez** dans `scraper_videos.py` :
-
-```python
-COOKIES = {
-    "__Secure-next-auth.session-token": "votre_token_ici",
-}
-```
-
-📖 **Guide détaillé :** Voir `get_cookies_guide.md`
-
----
-
-## 🛠️ Configuration
-
-### Dans `scraper_videos_selenium.py` :
-
-```python
-BASE_URL = "https://sora.chatgpt.com/explore?feed=top"  # URL à scraper
-DEST_DIR = pathlib.Path("videos")  # Dossier de destination
-HEADLESS = False  # True = navigateur invisible
-WAIT_TIME = 10  # Temps d'attente (secondes)
-```
-
----
-
-## � What's the Metadata Mode?
-
-The metadata mode extracts **structured information** about each video without downloading the actual video files. Perfect for:
-
-- 🎬 **Building a TikTok-like app** - Get all video info in JSON format
-- 📊 **Analytics dashboards** - Track engagement, popular creators
-- 🔍 **Search engines** - Index video descriptions and prompts
-- 📈 **Trend analysis** - Monitor likes, comments, shares over time
-- 💾 **Archiving** - Store metadata without huge video files
-
-### Example Output
-
-```json
-{
-  "video_id": "abc123",
-  "creator": {
-    "username": "johndoe",
-    "avatar_url": "https://...",
-    "verified": true
-  },
-  "content": {
-    "description": "Amazing sunset over ocean",
-    "prompt": "Cinematic shot..."
-  },
-  "engagement": {
-    "likes": 1250,
-    "comments_count": 45,
-    "views": 5600
-  },
-  "comments": [
-    {"author": "user123", "text": "Great work!", "likes": 23}
-  ]
-}
-```
-
-**[📖 Complete Metadata Mode Guide](METADATA_MODE.md)** | **[⚡ Quick Reference](METADATA_QUICK_REF.md)** | **[🚀 Getting Started](GETTING_STARTED.md)**
-
----
-
-## �📁 Structure du projet
-
-```
-scrapper_sora2/
-├── scraper_videos.py              # Version simple (requests)
-├── scraper_videos_selenium.py     # Version Selenium de base
-├── scraper_sora_advanced.py       # ⭐ Version avancée avec CLI (RECOMMANDÉ)
-├── requirements.txt               # Dépendances version simple
-├── requirements_selenium.txt      # Dépendances Selenium
-├── get_cookies_guide.md          # Guide cookies
-├── USAGE_GUIDE.md                # 📖 Guide complet d'utilisation
-├── QUICK_START.md                # ⚡ Démarrage rapide
-├── examples.sh                    # 💡 Exemples de commandes
-├── README.md                      # Ce fichier
-└── videos/                        # Vidéos téléchargées (créé auto)
-```
-
----
-
-## 🔧 Dépannage
-
-### ❌ Erreur : "403 Forbidden"
-→ Utilisez `scraper_videos_selenium.py` au lieu de `scraper_videos.py`
-
-### ❌ Erreur : "No such file or directory: 'chromedriver'"
-→ Selenium va télécharger chromedriver automatiquement au premier lancement
-
-### ❌ Aucune vidéo trouvée
-→ Sora charge peut-être les vidéos via API ou blob://
-→ Vérifiez `page_backup.html` (créé automatiquement)
-→ Les vidéos Sora utilisent peut-être un système de streaming spécial
-
-### ❌ Chrome ne s'ouvre pas
-→ Vérifiez que Chrome est installé
-→ Essayez `HEADLESS = False` pour voir le navigateur
-
----
-
-## ⚠️ Avertissement légal
-
-- ✅ N'utilisez ce script QUE pour vos propres vidéos
-- ✅ Respectez les CGU de Sora/OpenAI
-- ❌ Ne distribuez pas les vidéos téléchargées
-- ❌ N'abusez pas du service (rate limiting)
-
----
-
-## 🎓 Ce que j'ai appris
-
-Sora est un site moderne protégé qui :
-- Nécessite une authentification forte
-- Charge le contenu dynamiquement en JavaScript
-- Utilise probablement des techniques anti-scraping
-- Peut servir les vidéos via CDN/API plutôt que HTML direct
-
-**Solution :** Automatisation avec un vrai navigateur (Selenium)
-
----
-
-## 🚀 Prochaines étapes
-
-Si Selenium ne trouve toujours pas les vidéos, on peut :
-
-1. **Intercepter les requêtes réseau** avec Selenium
-2. **Analyser l'API** utilisée par Sora
-3. **Extraire les blob:// URLs** si les vidéos sont en blob
-4. **Utiliser l'onglet Network** pour trouver les vraies URLs
-
-Besoin d'aide ? Dites-moi ce que vous voyez ! 💪
-
----
-
-## 🎉 NEW: Metadata Extraction Mode
-
-### What's New?
-
-The scraper now includes a **powerful metadata extraction mode** that collects comprehensive information about each video without downloading the video files. Perfect for building TikTok-like apps!
-
-### Quick Start
-
-```bash
-# Extract metadata from 20 videos
 python scraper_sora_advanced.py \
   --mode profile \
   --profile-url "https://sora.chatgpt.com/user/USERNAME" \
-  --num-videos 20 \
+  --num-videos 50 \
+  --use-existing-chrome \
+  --slow
+```
+
+### 4. Build a video database
+```bash
+# Extract metadata
+python scraper_sora_advanced.py \
+  --mode home \
+  --all \
+  --metadata-mode \
+  --metadata-output database.json
+
+# Import to MongoDB
+mongoimport --db myapp --collection videos --file database.json --jsonArray
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### ❌ Only getting a few videos
+
+The scraper now handles React virtual scrolling correctly. Make sure you're using:
+- `--all` flag to scrape everything, OR
+- Higher `--num-videos` count
+
+### ❌ Chrome connection failed
+
+If using `--use-existing-chrome`:
+1. Make sure Chrome is running with `./launch_chrome.sh`
+2. Check if port 9222 is in use: `lsof -ti:9222`
+3. Close other Chrome instances
+
+### ❌ "403 Forbidden" or login required
+
+1. Use `--use-existing-chrome` and log in manually
+2. Don't use `--headless` mode
+3. Use `--slow` mode to avoid detection
+
+### ❌ No videos found
+
+1. Check your profile URL is correct
+2. Ensure you're logged in
+3. Try increasing `--delay` value
+4. Use `--slow` mode
+
+---
+
+## 📁 Project Structure
+
+```
+scrapper_sora2/
+├── scraper_sora_advanced.py   # Main scraper (use this!)
+├── interactive_scraper.py      # Interactive interface
+├── start.sh                    # Launch interactive mode
+├── launch_chrome.sh            # Launch Chrome with debugging
+├── requirements_selenium.txt   # Dependencies
+├── README.md                   # This file
+├── videos/                     # Downloaded videos (auto-created)
+└── metadata/                   # Metadata JSON files (auto-created)
+```
+
+---
+
+## 📊 Metadata vs Download Mode
+
+| Feature | Metadata Mode | Download Mode |
+|---------|---------------|---------------|
+| **Output** | Structured JSON | MP4 video files |
+| **Speed** | Fast (no downloads) | Slow (downloads videos) |
+| **Storage** | Small (KBs) | Large (GBs) |
+| **Data** | Creator, stats, comments | Video files only |
+| **Best for** | App development, analytics | Video archiving |
+| **Flag** | `--metadata-mode` | (default) |
+
+---
+
+## ⚠️ Best Practices
+
+### Avoid detection:
+- ✅ Use `--slow` mode for large scrapes
+- ✅ Use `--use-existing-chrome` to reuse sessions
+- ✅ Don't scrape too aggressively
+- ✅ Respect rate limits
+
+### Efficient scraping:
+- ✅ Use `--metadata-mode` if you don't need video files
+- ✅ Use `--metadata-per-file` for incremental processing
+- ✅ Use `--all` to get everything in one run
+- ✅ Keep Chrome session alive for multiple runs
+
+### Data management:
+- ✅ Use `--metadata-output` to name your datasets
+- ✅ Use `--output-dir` to organize downloads
+- ✅ Back up your metadata files
+- ✅ Parse JSON with your favorite tools
+
+---
+
+## 🎓 Examples
+
+### Beginner: Just testing
+```bash
+./start.sh
+# Select: Home, 5 videos, Metadata mode
+```
+
+### Intermediate: Specific profile
+```bash
+python scraper_sora_advanced.py \
+  --mode profile \
+  --profile-url "https://sora.chatgpt.com/user/USERNAME" \
+  --num-videos 30 \
   --metadata-mode
 ```
 
-**Output:** `metadata.json` with structured data ready for import!
-
-### What You Get
-
-For each video:
-- 👤 **Creator info** (username, avatar, verified status)
-- 📝 **Content** (description, prompt, title)
-- 📊 **Engagement** (likes, comments, shares, views, remixes)
-- 💬 **Comments** (up to 10 comments with details)
-- 🎬 **Media** (video URL, thumbnail, duration)
-- 📌 **Metadata** (timestamps, unique ID, post URL)
-
-### Documentation
-
-| Guide | Purpose |
-|-------|---------|
-| **[🚀 Getting Started](GETTING_STARTED.md)** | Step-by-step tutorial |
-| **[⚡ Quick Reference](METADATA_QUICK_REF.md)** | Command cheat sheet |
-| **[📖 Complete Guide](METADATA_MODE.md)** | Full documentation |
-| **[🔄 Flow Diagrams](METADATA_FLOW.md)** | Architecture overview |
-| **[📚 Docs Index](DOCS_INDEX.md)** | All documentation |
-
-### Example: Import to MongoDB
-
+### Advanced: Complete extraction
 ```bash
-# Extract metadata
+# Step 1: Setup (one time)
+./launch_chrome.sh
+# Log in to Sora
+
+# Step 2: Extract everything
 python scraper_sora_advanced.py \
   --mode profile \
   --profile-url "https://sora.chatgpt.com/user/USERNAME" \
   --all \
-  --metadata-mode
-
-# Import to database
-mongoimport --db tiktok --collection videos --file metadata.json --jsonArray
+  --metadata-mode \
+  --metadata-per-file \
+  --use-existing-chrome \
+  --slow \
+  --delay 3
 ```
-
-### Why Use Metadata Mode?
-
-| Feature | Download Mode | Metadata Mode |
-|---------|---------------|---------------|
-| **Output** | MP4 video files | Structured JSON |
-| **Speed** | Slow (downloads) | Fast (no downloads) |
-| **Storage** | Large (GBs) | Small (KBs) |
-| **Use case** | Video archiving | App development, analytics |
-| **Data** | Video only | All info (creator, engagement, comments) |
-
-### Ready to Start?
-
-```bash
-# Quick test (takes 2 minutes)
-python scraper_sora_advanced.py --mode home --num-videos 5 --metadata-mode
-
-# View results
-cat metadata.json | head -50
-
-# See usage examples
-python example_metadata_usage.py
-```
-
-**[📖 Read the Getting Started Guide](GETTING_STARTED.md)** for a complete tutorial!
 
 ---
 
-## 📞 Support & Help
+## ⚖️ Legal & Ethics
 
-- **New to the scraper?** Start with [GETTING_STARTED.md](GETTING_STARTED.md)
-- **Quick commands?** Check [METADATA_QUICK_REF.md](METADATA_QUICK_REF.md)
-- **Need help?** Read [DOCS_INDEX.md](DOCS_INDEX.md) for all documentation
-- **Command help:** Run `python scraper_sora_advanced.py --help`
+- ✅ Use only for your own content or with permission
+- ✅ Respect Sora's Terms of Service
+- ✅ Don't redistribute scraped content
+- ✅ Don't abuse the service (rate limiting)
+- ❌ Don't use for commercial purposes without authorization
+
+---
+
+## 🆘 Getting Help
+
+1. **Read this README** thoroughly
+2. **Try interactive mode**: `./start.sh`
+3. **Check command help**: `python scraper_sora_advanced.py --help`
+4. **Test with small numbers** first (e.g., `--num-videos 5`)
+5. **Use `--slow` mode** if having issues
+
+---
+
+## 🎉 What's New
+
+### v2.0 - Metadata Mode & Interactive Interface
+- ✨ Complete metadata extraction (creator, engagement, comments)
+- 🎮 Interactive CLI for beginners
+- 🔄 Virtual scrolling fix (collects ALL videos)
+- 🌐 Chrome session reuse
+- 🐢 Slow mode for stealth
+- 📝 Comprehensive JSON output
+- 🎯 One JSON per video option
 
 ---
 
 **Happy scraping! 🎬✨**
+
+**Quick start:** `./start.sh`
