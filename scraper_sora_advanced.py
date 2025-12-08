@@ -538,132 +538,196 @@ class SoraScraper:
         
         return video_urls
     
-    def _is_similar_url(self, url1, url2):
+    def scrape_remix_chain(self, video_url, max_depth=None, scroll_delay=2):
         """
-        Vérifie si deux URLs sont similaires (ignore les paramètres de requête).
+        Scrape all remixes starting from a single video, following the remix chain.
+        This allows scraping unlimited videos by following remix links.
         
         Args:
-            url1 (str): Première URL
-            url2 (str): Deuxième URL
+            video_url (str): Starting video URL (e.g., https://sora.chatgpt.com/video/abc123)
+            max_depth (int): Maximum depth to follow (None = unlimited)
+            scroll_delay (float): Delay between actions
             
         Returns:
-            bool: True si les URLs sont similaires
+            set: Set of video URLs found in the remix chain
         """
-        from urllib.parse import urlparse
+        print("="*60)
+        print("🎨 MODE REMIX: Suivi de la chaîne de remixes")
+        print("="*60)
+        print(f"📍 Vidéo de départ: {video_url}")
+        print(f"🔄 Profondeur max: {'Illimitée' if max_depth is None else max_depth}")
+        print("="*60)
+        print()
         
-        parsed1 = urlparse(url1)
-        parsed2 = urlparse(url2)
+        # Create the driver if it doesn't exist
+        if not self.driver:
+            self.create_driver()
         
-        # Comparer le domaine et le chemin (ignorer les query params)
-        return (parsed1.netloc == parsed2.netloc and 
-                parsed1.path.rstrip('/') == parsed2.path.rstrip('/'))
-    
-    def _detect_page_type(self):
-        """
-        Détecte le type de page actuelle (homepage, profil, etc.).
+        all_video_urls = set()
+        processed_urls = set()  # To avoid processing same video twice
+        queue = [(video_url, 0)]  # (url, depth)
         
-        Returns:
-            str: Type de page détecté
-        """
-        current_url = self.driver.current_url.lower()
-        
-        if "/user/" in current_url or "/profile/" in current_url or "/@" in current_url:
-            return "profile"
-        elif "/explore" in current_url or "/feed" in current_url:
-            return "homepage"
-        else:
-            return "unknown"
-    
-    def download_file(self, url, dest_dir, index=None):
-        """
-        Télécharge un fichier vidéo avec barre de progression.
-        
-        Args:
-            url (str): L'URL du fichier à télécharger
-            dest_dir (pathlib.Path): Le dossier de destination
-            index (int): Index de la vidéo (pour nommage)
+        while queue:
+            current_url, depth = queue.pop(0)
             
-        Returns:
-            bool: True si le téléchargement a réussi, False sinon
-        """
-        try:
-            # Extraire le nom du fichier depuis l'URL
-            parsed_url = urlparse(url)
-            filename = os.path.basename(parsed_url.path)
+            # Check depth limit
+            if max_depth is not None and depth > max_depth:
+                print(f"⚠️  Profondeur maximale atteinte ({max_depth})")
+                continue
             
-            # Si pas de nom de fichier, utiliser un nom par défaut
-            if not filename or '.' not in filename:
-                ext = '.mp4'
-                for video_ext in VIDEO_EXTENSIONS:
-                    if video_ext in url.lower():
-                        ext = video_ext
-                        break
-                
-                if index is not None:
-                    filename = f"video_{index:03d}{ext}"
-                else:
-                    filename = f"video_{hash(url) % 100000}{ext}"
+            # Skip if already processed
+            if current_url in processed_urls:
+                continue
             
-            dest_path = dest_dir / filename
+            processed_urls.add(current_url)
             
-            # Vérifier si le fichier existe déjà
-            if dest_path.exists():
-                print(f"⏭️  Fichier déjà existant: {filename}")
-                return True
+            print(f"\n{'  ' * depth}[Profondeur {depth}] 🎬 Analyse: {current_url}")
             
-            # Faire la requête avec streaming
-            print(f"📥 Téléchargement: {filename}")
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://sora.chatgpt.com/'
-            }
-            response = requests.get(url, stream=True, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            # Obtenir la taille totale
-            total_size = int(response.headers.get('content-length', 0))
-            
-            # Télécharger avec barre de progression
-            with open(dest_path, 'wb') as file:
-                if total_size > 0:
-                    with tqdm(total=total_size, unit='B', unit_scale=True, unit_divisor=1024) as pbar:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                file.write(chunk)
-                                pbar.update(len(chunk))
-                else:
-                    # Pas de taille connue, télécharger sans barre
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            file.write(chunk)
-            
-            print(f"✅ Téléchargé: {filename}\n")
-            return True
-            
-        except requests.RequestException as e:
-            print(f"❌ Erreur lors du téléchargement de {url}: {e}\n")
-            return False
-        except Exception as e:
-            print(f"❌ Erreur inattendue pour {url}: {e}\n")
-            return False
-    
-    def save_html_backup(self, filename="page_backup.html"):
-        """Sauvegarde le HTML pour inspection manuelle."""
-        if self.driver:
-            html = self.driver.page_source
-            backup_path = pathlib.Path(filename)
-            with open(backup_path, 'w', encoding='utf-8') as f:
-                f.write(html)
-            print(f"💾 HTML sauvegardé: {backup_path.absolute()}")
-    
-    def close(self):
-        """Ferme le driver Selenium."""
-        if self.driver:
-            print("\n🔒 Fermeture du navigateur...")
             try:
-                self.driver.quit()
-            except:
-                pass
+                # Navigate to the video page
+                self.driver.get(current_url)
+                time.sleep(scroll_delay)
+                
+                # Add current video URL
+                all_video_urls.add(current_url)
+                
+                # Wait for page to load
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                
+                time.sleep(2)  # Extra wait for dynamic content
+                
+                # Look for remix links/buttons
+                remix_urls = self._find_remix_links()
+                
+                if remix_urls:
+                    print(f"{'  ' * depth}   ✅ Trouvé {len(remix_urls)} remix(s)")
+                    
+                    # Add remix URLs to queue
+                    for remix_url in remix_urls:
+                        if remix_url and remix_url not in processed_urls:
+                            queue.append((remix_url, depth + 1))
+                            all_video_urls.add(remix_url)
+                else:
+                    print(f"{'  ' * depth}   ℹ️  Aucun remix trouvé (fin de chaîne)")
+                
+            except Exception as e:
+                print(f"{'  ' * depth}   ❌ Erreur: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        print(f"\n{'='*60}")
+        print(f"✅ Chaîne de remixes terminée!")
+        print(f"📊 Total de vidéos trouvées: {len(all_video_urls)}")
+        print(f"🔄 Vidéos analysées: {len(processed_urls)}")
+        print(f"{'='*60}\n")
+        
+        return all_video_urls
+    
+    def _find_remix_links(self):
+        """
+        Find remix links on a video page.
+        
+        Returns:
+            list: List of remix video URLs
+        """
+        remix_urls = []
+        
+        # Strategy 1: Look for remix section/grid
+        try:
+            # Common patterns for remix sections
+            remix_selectors = [
+                "div[class*='remix']",
+                "section[class*='remix']",
+                "[data-testid*='remix']",
+                "div[aria-label*='Remix']",
+                "div[aria-label*='remix']",
+            ]
+            
+            for selector in remix_selectors:
+                try:
+                    remix_sections = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for section in remix_sections:
+                        if not section:
+                            continue
+                        # Find links within remix sections
+                        links = section.find_elements(By.TAG_NAME, "a")
+                        for link in links:
+                            if not link:
+                                continue
+                            try:
+                                href = link.get_attribute("href")
+                                if href and "/video/" in href:
+                                    remix_urls.append(href)
+                            except:
+                                pass
+                except:
+                    pass
+        except:
+            pass
+        
+        # Strategy 2: Look for video links in the page
+        try:
+            all_links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/video/']")
+            for link in all_links:
+                if not link:
+                    continue
+                try:
+                    href = link.get_attribute("href")
+                    if href and href not in remix_urls:
+                        # Try to determine if it's a remix link
+                        # (check parent elements for remix-related classes/text)
+                        try:
+                            parent = link.find_element(By.XPATH, "..")
+                            if parent:
+                                parent_class = parent.get_attribute("class") or ""
+                                parent_text = parent.text.lower()
+                                
+                                if "remix" in parent_class.lower() or "remix" in parent_text:
+                                    remix_urls.append(href)
+                        except:
+                            pass
+                except:
+                    pass
+        except:
+            pass
+        
+        # Strategy 3: Look for "View more" or related videos section
+        try:
+            related_selectors = [
+                "div[class*='related']",
+                "section[class*='related']",
+                "div[class*='similar']",
+                "[data-testid*='related']",
+            ]
+            
+            for selector in related_selectors:
+                try:
+                    related_sections = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for section in related_sections:
+                        if not section:
+                            continue
+                        links = section.find_elements(By.CSS_SELECTOR, "a[href*='/video/']")
+                        for link in links:
+                            if not link:
+                                continue
+                            try:
+                                href = link.get_attribute("href")
+                                if href and href not in remix_urls:
+                                    remix_urls.append(href)
+                            except:
+                                pass
+                except:
+                    pass
+        except:
+            pass
+        
+        # Deduplicate and clean
+        remix_urls = list(set(remix_urls))
+        
+        return remix_urls
     
     def extract_video_metadata(self, video_url):
         """
@@ -1075,6 +1139,115 @@ class SoraScraper:
         print("="*60)
         
         return all_metadata
+    
+    def save_html_backup(self):
+        """Sauvegarde le HTML de la page actuelle pour debugging."""
+        if not self.driver:
+            print("⚠️  Aucun driver actif, impossible de sauvegarder le HTML")
+            return
+        
+        try:
+            html = self.driver.page_source
+            backup_file = pathlib.Path("page_backup.html")
+            
+            with open(backup_file, 'w', encoding='utf-8') as f:
+                f.write(html)
+            
+            print(f"💾 HTML sauvegardé: {backup_file.absolute()}")
+        except Exception as e:
+            print(f"⚠️  Erreur lors de la sauvegarde du HTML: {e}")
+    
+    def close(self):
+        """Ferme le driver proprement."""
+        if self.driver:
+            try:
+                self.driver.quit()
+                print("🔒 Navigateur fermé")
+            except Exception as e:
+                print(f"⚠️  Erreur lors de la fermeture du navigateur: {e}")
+    
+    def download_file(self, url, dest_dir, index=None):
+        """
+        Télécharge un fichier vidéo.
+        
+        Args:
+            url (str): URL du fichier à télécharger
+            dest_dir (pathlib.Path): Dossier de destination
+            index (int): Index du fichier (pour nommage)
+            
+        Returns:
+            bool: True si succès, False sinon
+        """
+        try:
+            # Générer un nom de fichier
+            if index:
+                # Utiliser l'index pour nommer
+                extension = self._get_extension_from_url(url)
+                filename = f"video_{index:03d}{extension}"
+            else:
+                # Utiliser le nom depuis l'URL
+                filename = url.split('/')[-1].split('?')[0]
+                if not any(filename.endswith(ext) for ext in VIDEO_EXTENSIONS):
+                    filename += '.mp4'
+            
+            filepath = dest_dir / filename
+            
+            # Vérifier si le fichier existe déjà
+            if filepath.exists():
+                print(f"⏭️  Fichier existe déjà: {filename}")
+                return True
+            
+            # Télécharger
+            print(f"📥 Téléchargement: {filename}")
+            print(f"   URL: {url[:70]}...")
+            
+            response = requests.get(url, stream=True, timeout=30)
+            response.raise_for_status()
+            
+            # Obtenir la taille du fichier
+            total_size = int(response.headers.get('content-length', 0))
+            
+            # Télécharger avec barre de progression
+            with open(filepath, 'wb') as f:
+                if total_size == 0:
+                    # Pas de taille connue
+                    f.write(response.content)
+                else:
+                    # Avec barre de progression
+                    with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"   ") as pbar:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                pbar.update(len(chunk))
+            
+            print(f"✅ Téléchargé: {filename} ({self._format_size(filepath.stat().st_size)})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Échec du téléchargement: {e}")
+            # Supprimer le fichier partiel
+            try:
+                if filepath.exists():
+                    filepath.unlink()
+            except:
+                pass
+            return False
+    
+    def _get_extension_from_url(self, url):
+        """Extrait l'extension depuis une URL."""
+        for ext in VIDEO_EXTENSIONS:
+            if ext in url.lower():
+                return ext
+        return '.mp4'  # Par défaut
+    
+    def _format_size(self, size):
+        """Formate une taille en bytes en format lisible."""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.2f} {unit}"
+            size /= 1024.0
+        return f"{size:.2f} TB"
+
 def main():
     """Fonction principale avec CLI."""
     parser = argparse.ArgumentParser(
@@ -1109,6 +1282,20 @@ Exemples d'utilisation:
   
   # Extraire TOUTES les métadonnées d'un profil avec session Chrome existante
   python scraper_sora_advanced.py --mode profile --profile-url "https://sora.chatgpt.com/user/johndoe" --all --metadata-mode --use-existing-chrome --slow
+  
+  # MODE REMIX: Suivre la chaîne de remixes d'une vidéo (scraper des vidéos illimitées!)
+  
+  # Suivre tous les remixes d'une vidéo (profondeur illimitée)
+  python scraper_sora_advanced.py --mode remix --video-url "https://sora.chatgpt.com/video/abc123"
+  
+  # Suivre les remixes avec profondeur limitée (max 5 niveaux)
+  python scraper_sora_advanced.py --mode remix --video-url "https://sora.chatgpt.com/video/abc123" --max-depth 5
+  
+  # Suivre les remixes et extraire les métadonnées (sans télécharger)
+  python scraper_sora_advanced.py --mode remix --video-url "https://sora.chatgpt.com/video/abc123" --metadata-mode
+  
+  # Suivre les remixes, télécharger toutes les vidéos en mode slow
+  python scraper_sora_advanced.py --mode remix --video-url "https://sora.chatgpt.com/video/abc123" --slow
         """
     )
     
@@ -1116,8 +1303,8 @@ Exemples d'utilisation:
         '--mode',
         type=str,
         required=True,
-        choices=['home', 'profile'],
-        help='Mode de scraping: "home" pour la page d\'accueil, "profile" pour un profil utilisateur'
+        choices=['home', 'profile', 'remix'],
+        help='Mode de scraping: "home" pour la page d\'accueil, "profile" pour un profil utilisateur, "remix" pour suivre la chaîne de remixes'
     )
     
     parser.add_argument(
@@ -1150,6 +1337,18 @@ Exemples d'utilisation:
         '--profile-url',
         type=str,
         help='URL du profil utilisateur (requis pour mode "profile")'
+    )
+    
+    parser.add_argument(
+        '--video-url',
+        type=str,
+        help='URL de la vidéo de départ (requis pour mode "remix")'
+    )
+    
+    parser.add_argument(
+        '--max-depth',
+        type=int,
+        help='Profondeur maximale de la chaîne de remixes (défaut: illimité)'
     )
     
     parser.add_argument(
@@ -1203,6 +1402,9 @@ Exemples d'utilisation:
     if args.mode == 'profile' and not args.profile_url:
         parser.error("--profile-url est requis pour le mode 'profile'")
     
+    if args.mode == 'remix' and not args.video_url:
+        parser.error("--video-url est requis pour le mode 'remix'")
+    
     if args.all and args.num_videos != 10:
         parser.error("Ne spécifiez pas --num-videos avec --all")
     
@@ -1248,12 +1450,24 @@ Exemples d'utilisation:
                 scroll_delay=args.delay,
                 all_mode=args.all
             )
-        else:  # mode == 'profile'
+        elif args.mode == 'profile':
             video_urls = scraper.scrape_user_profile(
                 profile_url=args.profile_url,
                 num_videos=args.num_videos,
                 scroll_delay=args.delay,
                 all_mode=args.all
+            )
+        else:  # mode == 'remix'
+            if not args.video_url:
+                print("❌ Erreur: --video-url requis pour le mode remix")
+                print("\nExemple:")
+                print('  python scraper_sora_advanced.py --mode remix --video-url "https://sora.chatgpt.com/video/abc123"')
+                return
+            
+            video_urls = scraper.scrape_remix_chain(
+                video_url=args.video_url,
+                max_depth=args.max_depth,
+                scroll_delay=args.delay
             )
         
         # Sauvegarder le HTML

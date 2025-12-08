@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "scraped_at": "2025-12-08T14:07:50.775874",
+  "total_videos": 1,
+  "source": "Sora (ChatGPT)",
+  "videos": [
+    {
+      "video_url": "https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a",
+      "video_id": "beddb27519399cb0",
+      "scraped_at": "2025-12-08T14:07:50.767326",
+      "creator": {
+        "username": null,
+        "display_name": null,
+        "profile_url": null,
+        "avatar_url": null,
+        "verified": false
+      },
+      "content": {
+        "description": null,
+        "prompt": null,
+        "title": null
+      },
+      "engagement": {
+        "likes": 0,
+        "comments_count": 0,
+        "shares": 0,
+        "views": 0,
+        "remixes": 0
+      },
+      "comments": [],
+      "media": {
+        "thumbnail_url": null,
+        "duration": null,
+        "resolution": null
+      },
+      "metadata": {
+        "post_url": null,
+        "created_at": null,
+        "model_version": null
+      }
+    }
+  ]
+}

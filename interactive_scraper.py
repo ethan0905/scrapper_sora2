@@ -129,16 +129,30 @@ def choose_mode():
     print(f"  {Colors.BOLD}2.{Colors.END} User Profile (specific creator)")
     print(f"     {Colors.CYAN}→ Get videos from a specific user's profile{Colors.END}")
     print()
+    print(f"  {Colors.BOLD}3.{Colors.END} Remix Chain (follow remixes from a video) {Colors.BOLD}NEW!{Colors.END}")
+    print(f"     {Colors.CYAN}→ Follow remix chain from one video (unlimited videos!){Colors.END}")
+    print(f"     {Colors.CYAN}→ Perfect for scraping a whole trend{Colors.END}")
+    print()
     
-    choice = get_choice("Choose an option", ['1', '2', 'home', 'profile'], default='2')
+    choice = get_choice("Choose an option", ['1', '2', '3', 'home', 'profile', 'remix'], default='2')
     
     if choice in ['1', 'home']:
-        return 'home', None
+        return 'home', None, None
+    elif choice in ['3', 'remix']:
+        print()
+        print_info("Example: https://sora.chatgpt.com/video/abc123")
+        video_url = get_url("Enter the video URL")
+        print()
+        if get_yes_no("Limit the depth of the remix chain?", default='n'):
+            max_depth = get_number("Maximum depth (levels of remixes)", default=10, min_val=1, max_val=100)
+            return 'remix', video_url, max_depth
+        else:
+            return 'remix', video_url, None
     else:
         print()
         print_info("Example: https://sora.chatgpt.com/user/johndoe")
         profile_url = get_url("Enter the profile URL")
-        return 'profile', profile_url
+        return 'profile', profile_url, None
 
 
 def choose_output_mode():
@@ -257,20 +271,30 @@ def show_documentation_links(metadata_mode):
 
 def build_command(config):
     """Build the command to execute"""
-    cmd = ['python3', 'scraper_sora_advanced.py']
+    # Use the current Python interpreter (important for virtual environments)
+    cmd = [sys.executable, 'scraper_sora_advanced.py']
     
     # Mode
     cmd.extend(['--mode', config['mode']])
     
-    # Profile URL
+    # Profile URL (for profile mode)
     if config['profile_url']:
         cmd.extend(['--profile-url', config['profile_url']])
     
-    # Quantity
-    if config['all_videos']:
-        cmd.append('--all')
-    else:
-        cmd.extend(['--num-videos', str(config['num_videos'])])
+    # Video URL (for remix mode)
+    if config['video_url']:
+        cmd.extend(['--video-url', config['video_url']])
+    
+    # Max depth (for remix mode)
+    if config['max_depth'] is not None:
+        cmd.extend(['--max-depth', str(config['max_depth'])])
+    
+    # Quantity (not used for remix mode with unlimited depth)
+    if config['mode'] != 'remix' or config['max_depth'] is not None:
+        if config['all_videos']:
+            cmd.append('--all')
+        else:
+            cmd.extend(['--num-videos', str(config['num_videos'])])
     
     # Metadata mode
     if config['metadata_mode']:
@@ -300,6 +324,12 @@ def show_command_summary(cmd, config):
     print(f"  Source: {Colors.GREEN}{config['mode'].upper()}{Colors.END}", end='')
     if config['profile_url']:
         print(f" ({config['profile_url'][:50]}...)")
+    elif config['video_url']:
+        print(f" ({config['video_url'][:50]}...)")
+        if config['max_depth'] is not None:
+            print(f"  Max depth: {Colors.YELLOW}{config['max_depth']} levels{Colors.END}")
+        else:
+            print(f"  Max depth: {Colors.YELLOW}Unlimited{Colors.END}")
     else:
         print()
     
@@ -426,8 +456,8 @@ def main():
     try:
         show_welcome()
         
-        # Step 1: Choose mode (home or profile)
-        mode, profile_url = choose_mode()
+        # Step 1: Choose mode (home, profile, or remix)
+        mode, url, max_depth = choose_mode()
         
         # Step 2: Choose output mode (metadata or video)
         metadata_mode = choose_output_mode()
@@ -446,7 +476,9 @@ def main():
         # Build config
         config = {
             'mode': mode,
-            'profile_url': profile_url,
+            'profile_url': url if mode == 'profile' else None,
+            'video_url': url if mode == 'remix' else None,
+            'max_depth': max_depth,
             'metadata_mode': metadata_mode,
             'metadata_per_file': metadata_per_file,
             'all_videos': all_videos,

@@ -1,20 +1,36 @@
 #!/bin/bash
-# Quick script to remove watermark from a video
-# Usage: ./quick_remove.sh <video_number> [mode]
-# Example: ./quick_remove.sh 1
-# Example: ./quick_remove.sh 5 slow
+# Quick script to remove watermark from video(s)
+# Usage: 
+#   ./quick_remove.sh <video_number>     # Process video_001.mp4
+#   ./quick_remove.sh <path/to/video>    # Process specific video
+#   ./quick_remove.sh <path/to/folder>   # Process all videos in folder
 
-echo "🎨 Sora Watermark Remover - High Quality Mode"
-echo "=============================================="
+echo "🎨 Sora Watermark Remover"
+echo "========================="
 echo ""
 
-# Check if video number is provided
+# Check if input is provided
 if [ $# -eq 0 ]; then
-    echo "Usage: ./quick_remove.sh <video_number>"
+    echo "Usage: ./quick_remove.sh <input> [mode]"
+    echo ""
+    echo "Input Options:"
+    echo "  <number>           - Video number (e.g., 1 for video_001.mp4)"
+    echo "  <path/to/video>    - Path to a specific video file"
+    echo "  <path/to/folder>   - Path to a folder of videos"
     echo ""
     echo "Examples:"
-    echo "  ./quick_remove.sh 1        # Remove from video_001.mp4 (high quality mode)"
-    echo "  ./quick_remove.sh 5        # Remove from video_005.mp4 (high quality mode)"
+    echo "  ./quick_remove.sh 1                    # Process video_001.mp4"
+    echo "  ./quick_remove.sh videos/my_video.mp4  # Process specific video"
+    echo "  ./quick_remove.sh videos/              # Process entire folder"
+    echo ""
+    echo "Mode (optional):"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "  Default: fast (LAMA) - GPU accelerated, recommended for Mac"
+        echo "  hq: High quality - CPU only on Mac, VERY SLOW"
+    else
+        echo "  Default: hq (high quality)"
+        echo "  fast: Faster processing"
+    fi
     echo ""
     echo "📹 Available videos:"
     ls -1 videos/video_*.mp4 2>/dev/null | head -10 || echo "  No videos found in videos/"
