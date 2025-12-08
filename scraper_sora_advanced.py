@@ -626,107 +626,153 @@ class SoraScraper:
         
         return all_video_urls
     
-    def _find_remix_links(self):
+    def _find_remix_links(self, max_load_more_clicks=5):
         """
-        Find remix links on a video page.
+        Find remix links on a video page by clicking thumbnail buttons.
+        The page shows remix thumbnails in buttons - we need to click them to get the URLs.
         
+        Args:
+            max_load_more_clicks (int): Maximum number of times to click "Load more"
+            
         Returns:
             list: List of remix video URLs
         """
         remix_urls = []
+        seen_thumbnails = set()
         
-        # Strategy 1: Look for remix section/grid
-        try:
-            # Common patterns for remix sections
-            remix_selectors = [
-                "div[class*='remix']",
-                "section[class*='remix']",
-                "[data-testid*='remix']",
-                "div[aria-label*='Remix']",
-                "div[aria-label*='remix']",
-            ]
-            
-            for selector in remix_selectors:
-                try:
-                    remix_sections = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for section in remix_sections:
-                        if not section:
-                            continue
-                        # Find links within remix sections
-                        links = section.find_elements(By.TAG_NAME, "a")
-                        for link in links:
-                            if not link:
-                                continue
-                            try:
-                                href = link.get_attribute("href")
-                                if href and "/video/" in href:
-                                    remix_urls.append(href)
-                            except:
-                                pass
-                except:
-                    pass
-        except:
-            pass
+        print("      🔍 Recherche des remixes via les thumbnails...")
         
-        # Strategy 2: Look for video links in the page
-        try:
-            all_links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/video/']")
-            for link in all_links:
-                if not link:
-                    continue
-                try:
-                    href = link.get_attribute("href")
-                    if href and href not in remix_urls:
-                        # Try to determine if it's a remix link
-                        # (check parent elements for remix-related classes/text)
-                        try:
-                            parent = link.find_element(By.XPATH, "..")
-                            if parent:
-                                parent_class = parent.get_attribute("class") or ""
-                                parent_text = parent.text.lower()
-                                
-                                if "remix" in parent_class.lower() or "remix" in parent_text:
-                                    remix_urls.append(href)
-                        except:
-                            pass
-                except:
-                    pass
-        except:
-            pass
+        # Strategy: Find thumbnail buttons in the remix section and click them
+        # The HTML structure shows: <button><img src="thumbnail_url"></button>
+        # These buttons are clickable and should navigate to the remix video
         
-        # Strategy 3: Look for "View more" or related videos section
-        try:
-            related_selectors = [
-                "div[class*='related']",
-                "section[class*='related']",
-                "div[class*='similar']",
-                "[data-testid*='related']",
-            ]
-            
-            for selector in related_selectors:
-                try:
-                    related_sections = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for section in related_sections:
-                        if not section:
-                            continue
-                        links = section.find_elements(By.CSS_SELECTOR, "a[href*='/video/']")
-                        for link in links:
-                            if not link:
-                                continue
-                            try:
-                                href = link.get_attribute("href")
-                                if href and href not in remix_urls:
-                                    remix_urls.append(href)
-                            except:
-                                pass
-                except:
-                    pass
-        except:
-            pass
+        for load_attempt in range(max_load_more_clicks):
+            try:
+                # Find all thumbnail buttons with Sora generation images
+                # Look for buttons containing images with alt="Sora generation"
+                thumbnail_buttons = self.driver.find_elements(
+                    By.CSS_SELECTOR, 
+                    "button img[alt*='Sora generation']"
+                )
+                
+                if not thumbnail_buttons:
+                    # Alternative: look for buttons with thumbnail images
+                    thumbnail_buttons = self.driver.find_elements(
+                        By.CSS_SELECTOR,
+                        "button img[src*='thumbnail']"
+                    )
+                
+                new_thumbnails = 0
+                for img in thumbnail_buttons:
+                    try:
+                        thumbnail_src = img.get_attribute("src")
+                        if thumbnail_src and thumbnail_src not in seen_thumbnails:
+                            seen_thumbnails.add(thumbnail_src)
+                            new_thumbnails += 1
+                            
+                            # Get the parent button
+                            button = img.find_element(By.XPATH, "..")
+                            
+                            # Check if button is clickable
+                            if button and button.is_displayed() and button.is_enabled():
+                                # Click the button to navigate to the remix
+                                try:
+                                    # Store current URL
+                                    current_url = self.driver.current_url
+                                    
+                                    # Click the thumbnail
+                                    button.click()
+                                    time.sleep(1.5)  # Wait for navigation
+                                    
+                                    # Get the new URL (should be the remix video)
+                                    new_url = self.driver.current_url
+                                    
+                                    # If URL changed, this is a remix link
+                                    if new_url != current_url and "/p/" in new_url:
+                                        if new_url not in remix_urls:
+                                            remix_urls.append(new_url)
+                                            print(f"         ✓ Remix trouvé: {new_url.split('/')[-1][:20]}...")
+                                    
+                                    # Navigate back
+                                    self.driver.back()
+                                    time.sleep(1.5)  # Wait for page to reload
+                                    
+                                except Exception as e:
+                                    # If click fails, navigate back and continue
+                                    try:
+                                        self.driver.back()
+                                        time.sleep(1)
+                                    except:
+                                        pass
+                    except:
+                        pass
+                
+                if new_thumbnails > 0:
+                    print(f"      📊 Cycle {load_attempt + 1}: {new_thumbnails} nouveaux thumbnails trouvés")
+                
+                # Try to find and click "Load more" / "Show more" button
+                load_more_found = False
+                load_more_selectors = [
+                    "button:contains('Load')",
+                    "button:contains('Show more')",
+                    "button:contains('View more')",
+                    "button[aria-label*='load']",
+                    "button[aria-label*='more']",
+                ]
+                
+                for selector in load_more_selectors:
+                    try:
+                        # For :contains, we need to use XPath instead
+                        if ":contains" in selector:
+                            text = selector.split("'")[1]
+                            buttons = self.driver.find_elements(
+                                By.XPATH,
+                                f"//button[contains(text(), '{text}')]"
+                            )
+                        else:
+                            buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        
+                        for button in buttons:
+                            if button and button.is_displayed() and button.is_enabled():
+                                try:
+                                    print(f"      🔄 Clic sur 'Load more' (tentative {load_attempt + 1}/{max_load_more_clicks})")
+                                    button.click()
+                                    time.sleep(2)  # Wait for new content to load
+                                    load_more_found = True
+                                    break
+                                except:
+                                    pass
+                        
+                        if load_more_found:
+                            break
+                    except:
+                        pass
+                
+                # If no "Load more" button found, we're done
+                if not load_more_found and load_attempt > 0:
+                    print(f"      ✓ Plus de bouton 'Load more' trouvé")
+                    break
+                    
+            except Exception as e:
+                print(f"      ⚠️ Erreur lors de la recherche de remixes: {e}")
+                break
         
-        # Deduplicate and clean
-        remix_urls = list(set(remix_urls))
+        # Fallback: Look for any video links in the page (old method)
+        if not remix_urls:
+            print("      🔄 Méthode de fallback: recherche de liens vidéo...")
+            try:
+                all_links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/p/']")
+                for link in all_links[:10]:  # Limit to first 10
+                    try:
+                        href = link.get_attribute("href")
+                        if href and href not in remix_urls and href != self.driver.current_url:
+                            remix_urls.append(href)
+                    except:
+                        pass
+            except:
+                pass
         
+        print(f"      ✅ Total: {len(remix_urls)} remixes trouvés")
         return remix_urls
     
     def extract_video_metadata(self, video_url):
@@ -1140,6 +1186,222 @@ class SoraScraper:
         
         return all_metadata
     
+    def extract_and_save_metadata_with_download(self, video_page_urls, output_file='metadata.json', per_file=False, output_dir=None, video_dir=None):
+        """
+        Extrait les métadonnées ET télécharge les vidéos pour toutes les URLs de pages.
+        
+        Args:
+            video_page_urls (set/list): URLs des pages vidéo (ex: /p/s_xxx)
+            output_file (str): Nom du fichier de sortie JSON
+            per_file (bool): Si True, sauvegarde chaque vidéo dans un fichier séparé
+            output_dir (pathlib.Path): Dossier de sortie pour JSONs (si per_file)
+            video_dir (pathlib.Path): Dossier de sortie pour les vidéos
+            
+        Returns:
+            list: Liste des métadonnées extraites
+        """
+        print("="*60)
+        print("📋 EXTRACTION DES MÉTADONNÉES + TÉLÉCHARGEMENT")
+        print("="*60)
+        print(f"🎯 Nombre de vidéos: {len(video_page_urls)}")
+        
+        if per_file:
+            if not output_dir:
+                output_dir = pathlib.Path("metadata")
+            output_dir.mkdir(exist_ok=True)
+            print(f"💾 Mode JSON: Un fichier par vidéo dans {output_dir.absolute()}")
+        else:
+            print(f"💾 Mode JSON: Toutes les métadonnées dans {output_file}")
+        
+        if not video_dir:
+            video_dir = pathlib.Path("videos")
+        video_dir.mkdir(exist_ok=True)
+        print(f"🎬 Dossier vidéos: {video_dir.absolute()}")
+        print()
+        
+        all_metadata = []
+        success_count = 0
+        fail_count = 0
+        
+        for i, page_url in enumerate(video_page_urls, 1):
+            print(f"[{i}/{len(video_page_urls)}] 🎬 Traitement de la vidéo...")
+            print(f"   URL de la page: {page_url[:70]}...")
+            
+            try:
+                # Navigate to the video page
+                self.driver.get(page_url)
+                time.sleep(3)  # Wait for page to load
+                
+                # Find the actual video element and get its source URL
+                video_file_url = None
+                try:
+                    video_element = self.driver.find_element(By.TAG_NAME, "video")
+                    video_file_url = video_element.get_attribute("src")
+                    
+                    if video_file_url:
+                        print(f"   ✅ URL vidéo trouvée: {video_file_url[:60]}...")
+                except Exception as e:
+                    print(f"   ⚠️  Impossible de trouver l'élément vidéo: {e}")
+                
+                # Extract metadata from the page
+                metadata = {
+                    "video_page_url": page_url,
+                    "video_file_url": video_file_url,
+                    "video_id": self._generate_video_id(page_url),
+                    "local_video_file": None,
+                    "scraped_at": datetime.now().isoformat(),
+                    "creator": {
+                        "username": None,
+                        "display_name": None,
+                        "profile_url": None,
+                        "avatar_url": None,
+                        "verified": False
+                    },
+                    "content": {
+                        "description": None,
+                        "prompt": None,
+                        "title": None
+                    },
+                    "engagement": {
+                        "likes": 0,
+                        "comments_count": 0,
+                        "shares": 0,
+                        "views": 0,
+                        "remixes": 0
+                    },
+                    "comments": [],
+                    "media": {
+                        "thumbnail_url": None,
+                        "duration": None,
+                        "resolution": None
+                    },
+                    "metadata": {
+                        "post_url": page_url,
+                        "created_at": None,
+                        "model_version": None
+                    }
+                }
+                
+                # Extract creator info, description, etc. from the page
+                try:
+                    # Look for username/profile links
+                    profile_links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/profile/'], a[href*='/@']")
+                    if profile_links:
+                        for link in profile_links[:1]:  # Take first one
+                            href = link.get_attribute("href")
+                            if href:
+                                metadata["creator"]["profile_url"] = href
+                                metadata["creator"]["username"] = href.split("/")[-1]
+                                metadata["creator"]["display_name"] = link.text.strip() or metadata["creator"]["username"]
+                                break
+                except:
+                    pass
+                
+                try:
+                    # Look for description/prompt text
+                    text_elements = self.driver.find_elements(By.CSS_SELECTOR, "p, div[class*='text'], div[class*='description']")
+                    for elem in text_elements:
+                        text = elem.text.strip()
+                        if text and len(text) > 10:  # Meaningful text
+                            if not metadata["content"]["description"]:
+                                metadata["content"]["description"] = text
+                            break
+                except:
+                    pass
+                
+                # Download the video file if URL found
+                if video_file_url:
+                    video_filename = f"video_{i:03d}_{metadata['video_id']}.mp4"
+                    video_path = video_dir / video_filename
+                    
+                    print(f"   📥 Téléchargement de la vidéo...")
+                    try:
+                        response = requests.get(video_file_url, stream=True, timeout=60)
+                        response.raise_for_status()
+                        
+                        total_size = int(response.headers.get('content-length', 0))
+                        
+                        with open(video_path, 'wb') as f:
+                            if total_size == 0:
+                                f.write(response.content)
+                            else:
+                                with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"      ") as pbar:
+                                    for chunk in response.iter_content(chunk_size=8192):
+                                        if chunk:
+                                            f.write(chunk)
+                                            pbar.update(len(chunk))
+                        
+                        metadata["local_video_file"] = str(video_path)
+                        file_size = video_path.stat().st_size
+                        print(f"   ✅ Vidéo téléchargée: {video_filename} ({self._format_size(file_size)})")
+                    except Exception as e:
+                        print(f"   ❌ Échec du téléchargement: {e}")
+                else:
+                    print(f"   ⚠️  Aucune URL de fichier vidéo trouvée, téléchargement ignoré")
+                
+                # Display summary
+                creator = metadata['creator']['username'] or 'Inconnu'
+                description = metadata['content']['description'] or 'Aucune description'
+                
+                print(f"   ✅ Créateur: {creator}")
+                print(f"   ✅ Description: {description[:50]}{'...' if len(description) > 50 else ''}")
+                
+                all_metadata.append(metadata)
+                success_count += 1
+                
+                # Save individual JSON if requested
+                if per_file and output_dir:
+                    video_id = metadata['video_id']
+                    json_filename = f"{video_id}.json"
+                    json_path = output_dir / json_filename
+                    
+                    with open(json_path, 'w', encoding='utf-8') as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                    
+                    print(f"   💾 JSON sauvegardé: {json_filename}")
+                
+                print()
+                
+            except Exception as e:
+                print(f"   ❌ Erreur: {e}")
+                import traceback
+                traceback.print_exc()
+                fail_count += 1
+                print()
+        
+        # Save all metadata to single file if not per_file mode
+        if not per_file:
+            output_path = pathlib.Path(output_file)
+            
+            output_data = {
+                "version": "1.0",
+                "scraped_at": datetime.now().isoformat(),
+                "total_videos": len(all_metadata),
+                "source": "Sora (ChatGPT)",
+                "videos": all_metadata
+            }
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(output_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 Toutes les métadonnées sauvegardées dans: {output_path.absolute()}")
+        
+        print("\n" + "="*60)
+        print("📊 RÉSUMÉ")
+        print("="*60)
+        print(f"✅ Vidéos traitées avec succès: {success_count}")
+        print(f"❌ Échecs: {fail_count}")
+        
+        if per_file and output_dir:
+            print(f"📁 Fichiers JSON: {output_dir.absolute()}")
+        else:
+            print(f"📁 Fichier JSON: {pathlib.Path(output_file).absolute()}")
+        
+        print(f"📁 Fichiers vidéo: {video_dir.absolute()}")
+        print("="*60)
+        
+        return all_metadata
+    
     def save_html_backup(self):
         """Sauvegarde le HTML de la page actuelle pour debugging."""
         if not self.driver:
@@ -1490,26 +1752,27 @@ Exemples d'utilisation:
             print(f"{i}. {url}")
         print("-"*60 + "\n")
         
-        # MODE MÉTADONNÉES: Extraire les métadonnées au lieu de télécharger
+        # MODE MÉTADONNÉES: Extraire les métadonnées ET télécharger les vidéos
         if args.metadata_mode:
             print("📋 MODE MÉTADONNÉES ACTIVÉ")
-            print("   Extraction des informations détaillées pour chaque vidéo...")
-            print("   (créateur, description, commentaires, engagement, etc.)\n")
+            print("   Extraction des informations détaillées + téléchargement des vidéos...")
+            print("   (créateur, description, commentaires, engagement, fichier vidéo, etc.)\n")
             
-            # Extraire et sauvegarder les métadonnées
+            # Extraire et sauvegarder les métadonnées (avec téléchargement)
             metadata_output_dir = dest_dir if args.metadata_per_file else None
-            scraper.extract_and_save_metadata(
+            scraper.extract_and_save_metadata_with_download(
                 video_urls,
                 output_file=args.metadata_output,
                 per_file=args.metadata_per_file,
-                output_dir=metadata_output_dir
+                output_dir=metadata_output_dir,
+                video_dir=dest_dir
             )
             
             # Fermer le navigateur
             scraper.close()
             scraper = None
             
-            print("\n✅ Extraction des métadonnées terminée!")
+            print("\n✅ Extraction des métadonnées et téléchargement terminés!")
             print("\n💡 FORMAT DE SORTIE:")
             print("   Les données sont structurées pour un import facile dans une app TikTok-like")
             print("   Chaque vidéo contient:")
@@ -1518,6 +1781,7 @@ Exemples d'utilisation:
             print("   - Statistiques d'engagement (likes, commentaires, partages)")
             print("   - Liste des commentaires extraits")
             print("   - URLs de la vidéo et thumbnail")
+            print("   - Fichier vidéo téléchargé localement")
             print("   - Métadonnées supplémentaires")
             
             return
