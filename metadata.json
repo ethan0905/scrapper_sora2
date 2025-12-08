@@ -1,15 +1,15 @@
 {
   "version": "1.0",
-  "scraped_at": "2025-12-08T14:19:26.113844",
-  "total_videos": 2,
+  "scraped_at": "2025-12-08T15:09:48.498708",
+  "total_videos": 1,
   "source": "Sora (ChatGPT)",
   "videos": [
     {
       "video_page_url": "https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a",
-      "video_file_url": "https://videos.openai.com/az/files/941d77cce5e9b63_00000000-0180-7282-80fe-a717e1fe58a5%2Fdrvs%2Fmd%2Fraw?se=2025-12-13T13%3A31%3A28Z&sp=r&sv=2024-08-04&sr=b&skoid=5e5fc900-07cf-43e7-ab5b-314c0d877bb0&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-12-07T01%3A08%3A20Z&ske=2025-12-14T01%3A13%3A20Z&sks=b&skv=2024-08-04&sig=Nb0bdLTZy/laiLJ/rVJW4mLovYNipvROElnpFOZ1s2Y%3D&ac=oaisdsorprwestus",
+      "video_file_url": "https://videos.openai.com/az/files/941d77cce5e9b63_00000000-0180-7282-80fe-a717e1fe58a5%2Fdrvs%2Fmd%2Fraw?se=2025-12-14T00%3A00%3A00Z&sp=r&sv=2024-08-04&sr=b&skoid=5e5fc900-07cf-43e7-ab5b-314c0d877bb0&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-12-08T01%3A08%3A20Z&ske=2025-12-15T01%3A13%3A20Z&sks=b&skv=2024-08-04&sig=fSo8%2BaY/oq0i/e1EmNnQdihS3lwWOksw7eD/0RSlnKI%3D&ac=oaisdsorprwestus",
       "video_id": "beddb27519399cb0",
       "local_video_file": "videos/video_001_beddb27519399cb0.mp4",
-      "scraped_at": "2025-12-08T14:19:20.285688",
+      "scraped_at": "2025-12-08T15:09:47.196422",
       "creator": {
         "username": "rickyberwick",
         "display_name": "rickyberwick",
@@ -37,43 +37,6 @@
       },
       "metadata": {
         "post_url": "https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a",
-        "created_at": null,
-        "model_version": null
-      }
-    },
-    {
-      "video_page_url": "https://sora.chatgpt.com/p/s_693253924ff88191baf132b579c9c3e5",
-      "video_file_url": "https://videos.openai.com/az/files/d4ae758ddc5f399_00000000-d984-7283-9f82-f0ee25cce9ac%2Fdrvs%2Fmd%2Fraw?se=2025-12-14T00%3A00%3A00Z&sp=r&sv=2024-08-04&sr=b&skoid=5e5fc900-07cf-43e7-ab5b-314c0d877bb0&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-12-08T01%3A08%3A20Z&ske=2025-12-15T01%3A13%3A20Z&sks=b&skv=2024-08-04&sig=MkMHQWDaAktNgNLCdiJbZ3Cfwt0D4G2rT3ya2IWH/K0%3D&ac=oaisdsorprwestus2",
-      "video_id": "5d269757e8e4fbb0",
-      "local_video_file": "videos/video_002_5d269757e8e4fbb0.mp4",
-      "scraped_at": "2025-12-08T14:19:25.098450",
-      "creator": {
-        "username": "mr.computerslop",
-        "display_name": "mr.computerslop",
-        "profile_url": "https://sora.chatgpt.com/profile/mr.computerslop",
-        "avatar_url": null,
-        "verified": false
-      },
-      "content": {
-        "description": "Bro did not just sing Little Einsteins 🤣",
-        "prompt": null,
-        "title": null
-      },
-      "engagement": {
-        "likes": 0,
-        "comments_count": 0,
-        "shares": 0,
-        "views": 0,
-        "remixes": 0
-      },
-      "comments": [],
-      "media": {
-        "thumbnail_url": null,
-        "duration": null,
-        "resolution": null
-      },
-      "metadata": {
-        "post_url": "https://sora.chatgpt.com/p/s_693253924ff88191baf132b579c9c3e5",
         "created_at": null,
         "model_version": null
       }
