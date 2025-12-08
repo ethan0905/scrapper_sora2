@@ -1,0 +1,22 @@
+/videos
+.gitignore
+*.txt
+.DS_Store
+
+# But include important docs
+!README.md
+!WATERMARK_REMOVAL_GUIDE.md
+__pycache__/
+*.html
+.env
+/venv
+/videos_cleaned
+
+# Sora watermark remover
+sora-watermark-remover/.venv/
+sora-watermark-remover/__pycache__/
+sora-watermark-remover/*.pyc
+sora-watermark-remover/.pytest_cache/
+sora-watermark-remover/weights/
+sora-watermark-remover/outputs/
+sora-watermark-remover/node_modules/
