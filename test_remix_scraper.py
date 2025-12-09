@@ -45,10 +45,22 @@ def test_remix_extraction(test_url, use_existing=False):
         print("📋 Extraction des remixes...")
         print()
         
+        # Store initial URL for safety check
+        initial_url = scraper.driver.current_url
+        
         # Extract remix URLs
         remix_urls = scraper._find_remix_links(max_load_more_clicks=5)
         
+        # Safety check: verify we're back on the original page
+        final_url = scraper.driver.current_url
+        if final_url != initial_url:
+            print(f"⚠️  WARNING: Page finale différente de la page initiale!")
+            print(f"   Initial: {initial_url}")
+            print(f"   Final:   {final_url}")
+        else:
+            print(f"✅ Page d'origine restaurée correctement")
         print()
+        
         print("=" * 70)
         print("RÉSULTATS")
         print("=" * 70)

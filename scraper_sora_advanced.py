@@ -673,6 +673,10 @@ class SoraScraper:
         
         print("      🔍 Recherche des remixes dans la section dédiée...")
         
+        # Store the original URL BEFORE any operations
+        store_url = self.driver.current_url
+        print(f"      📍 URL d'origine: {store_url}")
+        
         # Scroll down to ensure remix section is visible
         try:
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
@@ -680,7 +684,13 @@ class SoraScraper:
         except:
             pass
         
-        for load_attempt in range(max_load_more_clicks):
+        # Track which index we're at (strictly forward navigation)
+        current_index = 0
+        load_more_clicks = 0
+        navigation_error_count = 0
+        
+        # Main loop: process remixes one by one, strictly forward
+        while load_more_clicks <= max_load_more_clicks:
             try:
                 # Close any login popups
                 try:
@@ -700,15 +710,27 @@ class SoraScraper:
                 except:
                     pass
                 
-                new_found = 0
-                store_url = self.driver.current_url
+                # Make sure we're on the original page
+                current = self.driver.current_url
                 
+                # Check for unexpected navigation (login, auth, etc.)
+                if "login" in current.lower() or "auth" in current.lower() or "signin" in current.lower():
+                    print(f"      ⚠️  Navigation vers une page inattendue: {current}")
+                    navigation_error_count += 1
+                    self.driver.get(store_url)
+                    time.sleep(2)
+                    if navigation_error_count > 3:
+                        print(f"      ❌ Trop d'erreurs de navigation, abandon")
+                        break
+                    continue
+                
+                if "/p/" in current and current != store_url:
+                    print(f"      🔙 Retour à la page d'origine...")
+                    self.driver.get(store_url)
+                    time.sleep(2)
+                
+                # RE-FETCH all buttons (fresh elements, no stale references)
                 try:
-                    # Strategy: Find buttons directly by their characteristics
-                    # Remix buttons: h-8 w-6 with img children
-                    # Load more button: h-[21px] w-4 (smaller, different size)
-                    
-                    # Find all small buttons that could be remixes or load more
                     all_small_buttons = self.driver.find_elements(By.TAG_NAME, "button")
                     
                     remix_buttons = []
@@ -717,58 +739,114 @@ class SoraScraper:
                     for button in all_small_buttons:
                         try:
                             classes = button.get_attribute("class") or ""
+                            aria_label = button.get_attribute("aria-label") or ""
+                            
+                            # Skip buttons that are clearly not remix buttons
+                            skip_keywords = ["close", "login", "sign", "share", "like", "follow", "menu"]
+                            if any(kw in aria_label.lower() for kw in skip_keywords):
+                                continue
+                            if any(kw in classes.lower() for kw in ["modal", "dialog", "nav"]):
+                                continue
                             
                             # Check if it's a remix button (h-8 w-6 with image)
                             if "h-8" in classes and "w-6" in classes and "shrink-0" in classes:
-                                # Verify it has an image child
                                 imgs = button.find_elements(By.TAG_NAME, "img")
-                                if imgs:
+                                if imgs and button.is_displayed() and button.is_enabled():
                                     remix_buttons.append(button)
                             
-                            # Check if it's the load more button (h-[21px] w-4)
+                            # Check if it's the load more button
                             elif "h-[21px]" in classes or ("w-4" in classes and "h-" in classes and len(classes) < 200):
-                                # Also check for the div child (overlay)
                                 divs = button.find_elements(By.TAG_NAME, "div")
-                                if divs and not load_more_button:
+                                if divs and not load_more_button and button.is_displayed():
                                     load_more_button = button
                         except:
                             continue
                     
-                    if remix_buttons:
-                        print(f"      ✅ Section remix trouvée!")
-                    else:
-                        print(f"      ⚠️  Aucun bouton de remix trouvé")
-                        continue
+                    total_buttons = len(remix_buttons)
                     
-                    if load_more_button:
-                        print(f"      🔘 'Load more' button trouvé")
+                    # Check if we need to load more
+                    if current_index >= total_buttons:
+                        if load_more_clicks < max_load_more_clicks:
+                            if load_more_button:
+                                print(f"      🔄 Index {current_index} >= {total_buttons} boutons, tentative load more ({load_more_clicks + 1}/{max_load_more_clicks})...")
+                                
+                                # Re-find load more button (avoid stale)
+                                time.sleep(1)
+                                all_buttons_refresh = self.driver.find_elements(By.TAG_NAME, "button")
+                                load_more_refresh = None
+                                
+                                for btn in all_buttons_refresh:
+                                    try:
+                                        classes = btn.get_attribute("class") or ""
+                                        if "h-[21px]" in classes or ("w-4" in classes and "h-" in classes and len(classes) < 200):
+                                            divs = btn.find_elements(By.TAG_NAME, "div")
+                                            if divs:
+                                                load_more_refresh = btn
+                                                break
+                                    except:
+                                        continue
+                                
+                                if load_more_refresh:
+                                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'end'});", load_more_refresh)
+                                    time.sleep(0.5)
+                                    self.driver.execute_script("arguments[0].click();", load_more_refresh)
+                                    time.sleep(3)
+                                    load_more_clicks += 1
+                                    print(f"      ✅ 'Load more' cliqué ({load_more_clicks}/{max_load_more_clicks})")
+                                    
+                                    # Scroll back to remix section
+                                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+                                    time.sleep(1)
+                                    continue  # Re-fetch buttons
+                            else:
+                                print(f"      ℹ️  Plus de 'Load more', arrêt")
+                                break
+                        else:
+                            print(f"      ✅ Maximum load more atteint ({max_load_more_clicks})")
+                            break
                     
-                    print(f"      📊 {len(remix_buttons)} remix(s) à traiter")
-                    
-                    # Click each remix button to navigate to its page
-                    for i, button in enumerate(remix_buttons, 1):
+                    # Process button at current_index
+                    if current_index < len(remix_buttons):
+                        button = remix_buttons[current_index]
+                        
+                        # Safety check
+                        if navigation_error_count > 3:
+                            print(f"      ⚠️  Trop d'erreurs de navigation, arrêt")
+                            break
+                        
                         try:
-                            # Check if button is still valid and visible
-                            if not button.is_displayed() or not button.is_enabled():
+                            # Safety check: ensure we're still on the correct page
+                            if self.driver.current_url != store_url:
+                                print(f"         ⚠️  Page changée avant le clic, retour à l'origine")
+                                self.driver.get(store_url)
+                                time.sleep(2)
                                 continue
                             
-                            # Scroll button into view (horizontally and vertically)
+                            # Scroll button into view
                             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'center'});", button)
                             time.sleep(0.5)
                             
-                            # Click with JavaScript (more reliable)
+                            # Click with JavaScript
                             self.driver.execute_script("arguments[0].click();", button)
                             time.sleep(2.5)
                             
                             # Get new URL
                             new_url = self.driver.current_url
                             
-                            # Check if URL changed (navigated to remix page)
-                            if new_url != store_url and "/p/" in new_url and new_url not in seen_urls:
+                            # Validate this is a proper video page
+                            is_valid_remix = (
+                                new_url != store_url and 
+                                "/p/" in new_url and 
+                                new_url not in seen_urls and
+                                "login" not in new_url.lower() and
+                                "auth" not in new_url.lower() and
+                                "signin" not in new_url.lower()
+                            )
+                            
+                            if is_valid_remix:
                                 seen_urls.add(new_url)
                                 remix_urls.append(new_url)
-                                new_found += 1
-                                print(f"         ✓ Remix {i}/{len(remix_buttons)} trouvé: {new_url.split('/')[-1][:30]}...")
+                                print(f"         ✓ Remix {current_index + 1} trouvé: {new_url.split('/')[-1][:30]}... (Total: {len(remix_urls)})")
                                 
                                 # Go back to original page
                                 self.driver.back()
@@ -781,14 +859,17 @@ class SoraScraper:
                                 except:
                                     pass
                             else:
-                                # URL didn't change, just go back if needed
+                                # Invalid URL, go back if needed
                                 if new_url != store_url:
+                                    if "login" in new_url.lower() or "auth" in new_url.lower():
+                                        print(f"         ⚠️  Navigation inattendue vers: {new_url}")
+                                        navigation_error_count += 1
                                     self.driver.back()
                                     time.sleep(1)
-                                
+                                    
                         except Exception as e:
-                            print(f"         ⚠️  Erreur clic remix {i}: {str(e)[:50]}")
-                            # Try to recover by going back to original page
+                            print(f"         ⚠️  Erreur clic remix {current_index + 1}: {str(e)[:50]}")
+                            # Try to recover
                             try:
                                 if self.driver.current_url != store_url:
                                     self.driver.back()
@@ -799,56 +880,17 @@ class SoraScraper:
                                     time.sleep(2)
                                 except:
                                     pass
-                    
-                    # Now click the "Load more" button if found
-                    if load_more_button and load_attempt < max_load_more_clicks - 1 and new_found > 0:
-                        try:
-                            print(f"      🔄 Clic sur 'Load more' (tentative {load_attempt + 1}/{max_load_more_clicks})")
-                            
-                            # Re-find the load more button (avoid stale element)
-                            time.sleep(1)
-                            all_buttons_refresh = self.driver.find_elements(By.TAG_NAME, "button")
-                            load_more_refresh = None
-                            
-                            for btn in all_buttons_refresh:
-                                try:
-                                    classes = btn.get_attribute("class") or ""
-                                    if "h-[21px]" in classes or ("w-4" in classes and "h-" in classes and len(classes) < 200):
-                                        divs = btn.find_elements(By.TAG_NAME, "div")
-                                        if divs:
-                                            load_more_refresh = btn
-                                            break
-                                except:
-                                    continue
-                            
-                            if load_more_refresh:
-                                # Scroll to load more button
-                                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'end'});", load_more_refresh)
-                                time.sleep(0.5)
-                                
-                                # Click it
-                                self.driver.execute_script("arguments[0].click();", load_more_refresh)
-                                time.sleep(3)
-                                
-                                print(f"      ✅ 'Load more' cliqué, nouvelles remixes chargées")
-                            else:
-                                print(f"      ⚠️  'Load more' button introuvable après refresh")
-                        except Exception as e:
-                            print(f"      ⚠️  Erreur clic 'Load more': {str(e)[:80]}")
+                        
+                        # Move to next index (strictly forward!)
+                        current_index += 1
+                    else:
+                        print(f"      ⚠️  Index {current_index} hors limites ({total_buttons} boutons)")
+                        break
                     
                 except Exception as e:
                     print(f"      ⚠️  Erreur lors de la recherche: {e}")
                     import traceback
                     traceback.print_exc()
-                
-                if new_found > 0:
-                    print(f"      📊 Cycle {load_attempt + 1}: {new_found} nouveau(x) remix trouvé(s) ({len(remix_urls)} total)")
-                else:
-                    print(f"      📊 Cycle {load_attempt + 1}: aucun nouveau remix")
-                
-                # Stop if no new remixes found and no load more button
-                if new_found == 0 and load_attempt > 0:
-                    print(f"      ✓ Plus de remixes à charger")
                     break
                     
             except Exception as e:
