@@ -22,7 +22,7 @@ VIDEO_URL="$1"
 shift  # Remove first argument, keep others
 
 # Check for existing Chrome
-CHROME_PID=$(ps aux | grep -i "chrome.*remote-debugging-port=9222" | grep -v grep | awk '{print $2}' | head -1)
+CHROME_PID=$(ps aux | grep -i "chrome.*9222" | grep -v grep | awk '{print $2}' | head -1)
 
 if [ -z "$CHROME_PID" ]; then
     echo "❌ No Chrome with remote debugging found!"
@@ -38,6 +38,10 @@ if [ -z "$CHROME_PID" ]; then
     exit 1
 else
     echo "✅ Found Chrome (PID: $CHROME_PID)"
+    echo ""
+    echo "⚠️  NOTE: If you get a version mismatch error, restart Chrome:"
+    echo "   1. Close all Chrome windows"
+    echo "   2. Run: open -a 'Google Chrome' --args --remote-debugging-port=9222"
     echo ""
 fi
 

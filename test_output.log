@@ -1,0 +1,143 @@
+======================================================================
+🧪 REMIX NAVIGATION TEST
+======================================================================
+
+This program tests systematic navigation through remix lists,
+especially after 'Load more' clicks.
+
+
+🔧 Setup:
+   URL: https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a
+   Mode: Existing Chrome
+
+🔗 Connecting to existing Chrome (port 9222)...
+   Make sure Chrome is running with:
+   open -a 'Google Chrome' --args --remote-debugging-port=9222
+
+📥 Setting up ChromeDriver (auto-version matching)...
+🔌 Connecting to Chrome...
+✅ Connected successfully!
+
+======================================================================
+🧪 TEST: SYSTEMATIC REMIX NAVIGATION (STRICTLY FORWARD)
+======================================================================
+
+📍 Navigating to: https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a
+✅ Page loaded: https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a
+
+======================================================================
+Would you like to analyze HTML structure first? (y/n)
+======================================================================
+
+======================================================================
+🔄 PROCESSING INDEX 0 (Load more clicks: 0)
+======================================================================
+
+📋 Scanning for remix buttons...
+✅ Found 2 remix buttons
+
+📊 Status:
+   Total buttons available: 2
+   Current index: 0
+   Unique remixes found so far: 0
+
+🎯 Navigating to remix at index 0...
+
+   [0] Navigating to remix...
+        Waiting 1.9s before click...
+        Button image: https://videos.openai.com/az/files/647631baea7339b...
+        Waiting 3.7s for page load...
+        ⚠️  Invalid URL: https://sora.chatgpt.com/p/s_6932520ddd548191b4ddede8695d361a
+
+======================================================================
+🔄 PROCESSING INDEX 1 (Load more clicks: 0)
+======================================================================
+
+📋 Scanning for remix buttons...
+✅ Found 2 remix buttons
+
+📊 Status:
+   Total buttons available: 2
+   Current index: 1
+   Unique remixes found so far: 0
+
+🎯 Navigating to remix at index 1...
+
+   [1] Navigating to remix...
+        Waiting 1.3s before click...
+        Button image: https://videos.openai.com/az/files/5b6bf0944f01f29...
+        Waiting 3.6s for page load...
+        ✅ Success: s_693253924ff88191baf132b579c9c3e5...
+        Waiting 1.5s before going back...
+        Waiting 3.5s after going back...
+        ⚠️  Not on original page, navigating...
+        ✅ New remix found! Total: 1
+
+======================================================================
+🔄 PROCESSING INDEX 2 (Load more clicks: 0)
+======================================================================
+
+📋 Scanning for remix buttons...
+✅ Found 2 remix buttons
+
+📊 Status:
+   Total buttons available: 2
+   Current index: 2
+   Unique remixes found so far: 1
+
+🔄 Reached end of list (index 2 >= 2 buttons)
+   Attempting to load more remixes...
+
+🔄 Looking for 'Load more' button...
+   Strategy: CSS selector (specific classes) - Found 1 candidates
+✅ Found 'Load more' button!
+   Classes: relative h-[21px] w-4 shrink-0 overflow-hidden rounded border-[0.5px] border-token-border-primary...
+   Waiting 2.0s before clicking...
+   Clicking 'Load more'...
+   Waiting 4.5s for new content to load...
+✅ 'Load more' clicked successfully
+✅ Load more clicked (1/5)
+   Waiting 5.0s for new content...
+
+======================================================================
+🔄 PROCESSING INDEX 2 (Load more clicks: 1)
+======================================================================
+
+📋 Scanning for remix buttons...
+✅ Found 12 remix buttons
+
+📊 Status:
+   Total buttons available: 12
+   Current index: 2
+   Unique remixes found so far: 1
+
+🎯 Navigating to remix at index 2...
+
+   [2] Navigating to remix...
+        Waiting 1.6s before click...
+        ❌ Error: Message: stale element reference: stale element no
+
+======================================================================
+🔄 PROCESSING INDEX 3 (Load more clicks: 1)
+======================================================================
+
+📋 Scanning for remix buttons...
+✅ Found 0 remix buttons
+⚠️  No remix buttons found
+
+======================================================================
+🎉 NAVIGATION TEST COMPLETE
+======================================================================
+
+📊 Results:
+   Total unique remixes found: 1
+   Final index reached: 3
+   Load more clicks: 1
+
+📋 Remix URLs:
+   1. https://sora.chatgpt.com/p/s_693253924ff88191baf132b579c9c3e5
+
+✅ Test completed!
+📊 Found 1 unique remixes
+
+✅ Keeping Chrome open (existing session)

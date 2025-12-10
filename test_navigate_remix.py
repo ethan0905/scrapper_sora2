@@ -32,11 +32,12 @@ def setup_driver(use_existing=False, debug_port=9222):
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
     
-    if use_existing:
-        driver = webdriver.Chrome(options=chrome_options)
-    else:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+    # Use ChromeDriverManager to auto-download correct version
+    print("📥 Setting up ChromeDriver (auto-version matching)...")
+    service = Service(ChromeDriverManager().install())
+    print("🔌 Connecting to Chrome...")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    print("✅ Connected successfully!")
     
     return driver
 
