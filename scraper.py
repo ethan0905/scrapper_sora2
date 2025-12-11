@@ -15,6 +15,7 @@ Clean approach:
 """
 
 import time
+import random
 import json
 import pathlib
 import argparse
@@ -29,7 +30,7 @@ from metadata_extractor import MetadataExtractor
 class SoraRemixScraper:
     """Main scraper orchestrator"""
     
-    def __init__(self, use_existing_chrome=False, debug_port=9222, output_dir="videos"):
+    def __init__(self, use_existing_chrome=False, debug_port=9222, output_dir="videos", slow_mode=False):
         self.browser_mgr = BrowserManager(use_existing_chrome, debug_port)
         self.driver = None
         self.navigator = None
@@ -37,6 +38,27 @@ class SoraRemixScraper:
         self.metadata_extractor = None
         self.output_dir = pathlib.Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
+        self.slow_mode = slow_mode
+        
+        # Slow mode delays (in seconds)
+        if slow_mode:
+            self.delays = {
+                'after_click': (3.0, 5.0),       # After clicking a button
+                'before_download': (2.0, 4.0),   # Before starting download
+                'after_download': (2.0, 3.0),    # After download completes
+                'page_load': (4.0, 6.0),         # Waiting for page to load
+                'between_remixes': (3.0, 5.0)    # Between processing remixes
+            }
+            print("🐢 SLOW MODE ENABLED - Human-like delays activated")
+        else:
+            self.delays = {
+                'after_click': (1.0, 2.0),
+                'before_download': (0.5, 1.0),
+                'after_download': (1.0, 1.5),
+                'page_load': (2.0, 3.0),
+                'between_remixes': (1.0, 2.0)
+            }
+            print("🚀 NORMAL MODE - Standard delays")
     
     def setup(self):
         """Initialize all components"""
@@ -44,6 +66,21 @@ class SoraRemixScraper:
         self.navigator = RemixNavigator(self.driver)
         self.downloader = VideoDownloader(self.driver)
         self.metadata_extractor = MetadataExtractor(self.driver)
+    
+    def _sleep(self, delay_type):
+        """
+        Sleep for a random duration based on delay type
+        
+        Args:
+            delay_type: Type of delay ('after_click', 'before_download', etc.)
+        """
+        if delay_type in self.delays:
+            min_delay, max_delay = self.delays[delay_type]
+            delay = random.uniform(min_delay, max_delay)
+            if self.slow_mode:
+                time.sleep(delay)
+            else:
+                time.sleep(delay)
     
     def scrape_remixes(self, start_url, max_remixes=None, download_videos=True):
         """
@@ -67,7 +104,7 @@ class SoraRemixScraper:
         print(f"🌐 Navigating to start URL...")
         print(f"🔍 DEBUG: Start URL = {start_url}")
         self.driver.get(start_url)
-        time.sleep(3.0)
+        self._sleep('page_load')
         
         # Verify we're on the right page
         actual_url = self.driver.current_url
@@ -147,6 +184,8 @@ class SoraRemixScraper:
                     print(f"   ⚠️  Skipping remix {i}")
                     continue
                 
+                self._sleep('after_click')
+                
                 current_url = self.driver.current_url
                 print(f"   ✅ Navigated to: {current_url}")
                 
@@ -156,6 +195,7 @@ class SoraRemixScraper:
                 
                 # Download video if requested
                 if download_videos:
+                    self._sleep('before_download')
                     print(f"   🎥 Looking for video...")
                     video_url = self.downloader.extract_video_url()
                     
@@ -170,6 +210,7 @@ class SoraRemixScraper:
                         if self.downloader.download_video(video_url, video_path):
                             metadata["downloaded_file"] = str(video_path)
                             successful_downloads += 1
+                            self._sleep('after_download')
                     else:
                         print(f"      ⚠️  No video found")
                 
@@ -231,6 +272,9 @@ Examples:
   
   # Metadata only
   python scraper.py https://sora.chatgpt.com/p/VIDEO_ID --metadata-only --max 20
+  
+  # Slow mode (more human-like, avoids detection)
+  python scraper.py https://sora.chatgpt.com/p/VIDEO_ID --max 50 --slow --use-existing
         """
     )
     
@@ -240,6 +284,7 @@ Examples:
     parser.add_argument("--metadata-only", action="store_true", help="Only extract metadata, don't download videos")
     parser.add_argument("--output", type=str, default="videos", metavar="DIR", help="Output directory")
     parser.add_argument("--debug-port", type=int, default=9222, metavar="PORT", help="Chrome debugging port")
+    parser.add_argument("--slow", action="store_true", help="Enable slow mode (longer delays, more human-like)")
     
     args = parser.parse_args()
     
@@ -247,7 +292,8 @@ Examples:
     scraper = SoraRemixScraper(
         use_existing_chrome=args.use_existing,
         debug_port=args.debug_port,
-        output_dir=args.output
+        output_dir=args.output,
+        slow_mode=args.slow
     )
     
     try:

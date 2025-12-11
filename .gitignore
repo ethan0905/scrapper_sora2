@@ -1,5 +1,6 @@
 /videos
 .gitignore
+*.md
 *.txt
 .DS_Store
 
@@ -20,3 +21,4 @@ sora-watermark-remover/.pytest_cache/
 sora-watermark-remover/weights/
 sora-watermark-remover/outputs/
 sora-watermark-remover/node_modules/
+
