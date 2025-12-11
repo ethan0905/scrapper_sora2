@@ -6,7 +6,7 @@
 
 # But include important docs
 !README.md
-!WATERMARK_REMOVAL_GUIDE.md
+WATERMARK_REMOVAL_GUIDE.md
 __pycache__/
 *.html
 .env
@@ -22,3 +22,4 @@ sora-watermark-remover/weights/
 sora-watermark-remover/outputs/
 sora-watermark-remover/node_modules/
 
+__pycache__/

@@ -7,6 +7,8 @@ A robust, production-ready scraper for downloading Sora remix videos and metadat
 ✅ **Load all remixes** - Automatically clicks "Load more" until target count is reached  
 ✅ **Smart navigation** - Clicks each thumbnail to navigate to full video page  
 ✅ **Robust downloads** - Downloads videos and extracts metadata from each page  
+✅ **Rich metadata** - Extracts description, likes, remixes count, creator profile  
+✅ **Comments extraction** - Captures all comments with user info, text, and likes  
 ✅ **Flexible limits** - Support for custom limits (e.g., 10, 50, 100, 200 remixes)  
 ✅ **Error recovery** - Avoids stale element errors and handles Chrome disconnections  
 ✅ **Human-like behavior** - Random delays and scrolling to avoid detection  
