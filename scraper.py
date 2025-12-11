@@ -275,11 +275,16 @@ Examples:
   
   # Slow mode (more human-like, avoids detection)
   python scraper.py https://sora.chatgpt.com/p/VIDEO_ID --max 50 --slow --use-existing
+  
+  # Batch processing from file
+  python scraper.py --batch urls.txt --max 50 --slow
+  python scraper.py --batch urls.txt --max 100 --use-existing --slow
         """
     )
     
-    parser.add_argument("url", help="URL of the Sora video page with remixes")
-    parser.add_argument("--max", type=int, default=None, metavar="N", help="Maximum number of remixes to scrape")
+    parser.add_argument("url", nargs="?", help="URL of the Sora video page with remixes")
+    parser.add_argument("--batch", type=str, metavar="FILE", help="Path to text file containing URLs (one per line)")
+    parser.add_argument("--max", type=int, default=None, metavar="N", help="Maximum number of remixes to scrape per URL")
     parser.add_argument("--use-existing", action="store_true", help="Connect to existing Chrome session")
     parser.add_argument("--metadata-only", action="store_true", help="Only extract metadata, don't download videos")
     parser.add_argument("--output", type=str, default="videos", metavar="DIR", help="Output directory")
@@ -287,6 +292,41 @@ Examples:
     parser.add_argument("--slow", action="store_true", help="Enable slow mode (longer delays, more human-like)")
     
     args = parser.parse_args()
+    
+    # Validate arguments
+    if not args.url and not args.batch:
+        parser.error("Either provide a URL or use --batch with a file path")
+    
+    if args.url and args.batch:
+        parser.error("Cannot use both URL and --batch. Choose one.")
+    
+    # Determine URLs to process
+    urls_to_process = []
+    
+    if args.batch:
+        # Read URLs from file
+        try:
+            batch_file = pathlib.Path(args.batch)
+            if not batch_file.exists():
+                print(f"❌ Error: Batch file not found: {args.batch}")
+                return
+            
+            print(f"📄 Reading URLs from: {args.batch}")
+            with open(batch_file, 'r') as f:
+                urls_to_process = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+            
+            print(f"✅ Found {len(urls_to_process)} URL(s) to process\n")
+            
+            if len(urls_to_process) == 0:
+                print("❌ Error: No valid URLs found in batch file")
+                return
+        
+        except Exception as e:
+            print(f"❌ Error reading batch file: {e}")
+            return
+    else:
+        # Single URL mode
+        urls_to_process = [args.url]
     
     # Create scraper
     scraper = SoraRemixScraper(
@@ -297,15 +337,52 @@ Examples:
     )
     
     try:
-        # Setup
+        # Setup (only once for all URLs)
         scraper.setup()
         
-        # Run
-        scraper.scrape_remixes(
-            start_url=args.url,
-            max_remixes=args.max,
-            download_videos=not args.metadata_only
-        )
+        # Process each URL
+        total_urls = len(urls_to_process)
+        
+        for idx, url in enumerate(urls_to_process, 1):
+            if total_urls > 1:
+                print("\n" + "="*70)
+                print(f"🎯 PROCESSING URL {idx}/{total_urls}")
+                print("="*70)
+                print(f"URL: {url}")
+                print()
+            
+            try:
+                # Run scraper on this URL
+                scraper.scrape_remixes(
+                    start_url=url,
+                    max_remixes=args.max,
+                    download_videos=not args.metadata_only
+                )
+                
+                if total_urls > 1:
+                    print(f"\n✅ Completed URL {idx}/{total_urls}")
+                    
+                    # Add delay between URLs if in slow mode and not the last URL
+                    if args.slow and idx < total_urls:
+                        wait_time = random.uniform(5.0, 8.0)
+                        print(f"⏳ Waiting {wait_time:.1f}s before next URL...")
+                        time.sleep(wait_time)
+            
+            except Exception as e:
+                print(f"\n❌ Error processing URL {idx}/{total_urls}: {e}")
+                print("⚠️  Continuing to next URL...")
+                import traceback
+                traceback.print_exc()
+                
+                # Continue to next URL even if this one failed
+                continue
+        
+        if total_urls > 1:
+            print("\n" + "="*70)
+            print(f"🎉 BATCH PROCESSING COMPLETE")
+            print("="*70)
+            print(f"Processed {total_urls} URL(s)")
+            print()
     
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")

@@ -2,6 +2,7 @@
 .gitignore
 *.md
 *.txt
+!example*.txt
 .DS_Store
 
 # But include important docs

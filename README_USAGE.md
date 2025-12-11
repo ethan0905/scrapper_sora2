@@ -9,6 +9,7 @@ A robust, production-ready scraper for downloading Sora remix videos and metadat
 ✅ **Robust downloads** - Downloads videos and extracts metadata from each page  
 ✅ **Rich metadata** - Extracts description, likes, remixes count, creator profile  
 ✅ **Comments extraction** - Captures all comments with user info, text, and likes  
+✅ **Batch processing** - Process multiple URLs from a text file  
 ✅ **Flexible limits** - Support for custom limits (e.g., 10, 50, 100, 200 remixes)  
 ✅ **Error recovery** - Avoids stale element errors and handles Chrome disconnections  
 ✅ **Human-like behavior** - Random delays and scrolling to avoid detection  
@@ -80,6 +81,42 @@ This is useful for:
 # Save to custom directory
 python sora_remix_scraper.py https://sora.chatgpt.com/p/VIDEO_ID --output my_videos
 ```
+
+### 6. Batch Processing (NEW!)
+
+Process multiple URLs from a text file:
+
+```bash
+# Create a text file with URLs (one per line)
+cat > urls.txt << EOF
+https://sora.chatgpt.com/p/s_6938eb61aa188191b082c4d8616abefd
+https://sora.chatgpt.com/p/s_6934e8bee4a88191a2d2da6cee9fbfd1
+https://sora.chatgpt.com/p/s_6939043409248191b8219e5d511ae0fa
+EOF
+
+# Run batch processing
+python scraper.py --batch urls.txt --max 50 --slow
+
+# With existing Chrome session
+python scraper.py --batch urls.txt --max 100 --use-existing --slow
+```
+
+**Batch file format:**
+- One URL per line
+- Lines starting with `#` are comments (ignored)
+- Empty lines are ignored
+
+**Example file:**
+```
+# High priority videos
+https://sora.chatgpt.com/p/s_6938eb61aa188191b082c4d8616abefd
+
+# Medium priority
+https://sora.chatgpt.com/p/s_6934e8bee4a88191a2d2da6cee9fbfd1
+https://sora.chatgpt.com/p/s_6939043409248191b8219e5d511ae0fa
+```
+
+See [BATCH_PROCESSING.md](BATCH_PROCESSING.md) for full documentation.
 
 ## Command-Line Options
 
