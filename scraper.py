@@ -39,6 +39,12 @@ class SoraRemixScraper:
         self.output_dir = pathlib.Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.slow_mode = slow_mode
+        self.use_existing_chrome = use_existing_chrome
+        self.debug_port = debug_port
+        
+        # Progress tracking
+        self.progress_file = self.output_dir / ".batch_progress.json"
+        self.checkpoint_file = self.output_dir / ".scrape_checkpoint.json"
         
         # Slow mode delays (in seconds)
         if slow_mode:
@@ -82,14 +88,128 @@ class SoraRemixScraper:
             else:
                 time.sleep(delay)
     
-    def scrape_remixes(self, start_url, max_remixes=None, download_videos=True):
+    def _is_session_error(self, exception):
+        """Check if exception is a session/connection error"""
+        error_keywords = [
+            "invalid session id",
+            "session deleted",
+            "chrome not reachable",
+            "connection refused",
+            "disconnected",
+            "target window already closed"
+        ]
+        error_msg = str(exception).lower()
+        return any(keyword in error_msg for keyword in error_keywords)
+    
+    def _load_progress(self):
+        """Load batch processing progress from file"""
+        if self.progress_file.exists():
+            try:
+                with open(self.progress_file, 'r') as f:
+                    return json.load(f)
+            except:
+                return {"completed_urls": []}
+        return {"completed_urls": []}
+    
+    def _save_progress(self, url):
+        """Save completed URL to progress file"""
+        try:
+            progress = self._load_progress()
+            if url not in progress["completed_urls"]:
+                progress["completed_urls"].append(url)
+            with open(self.progress_file, 'w') as f:
+                json.dump(progress, f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save progress: {e}")
+    
+    def _is_completed(self, url):
+        """Check if URL has already been processed"""
+        progress = self._load_progress()
+        return url in progress["completed_urls"]
+    
+    def _load_checkpoint(self, url):
+        """Load checkpoint for a specific URL"""
+        if self.checkpoint_file.exists():
+            try:
+                with open(self.checkpoint_file, 'r') as f:
+                    checkpoints = json.load(f)
+                    return checkpoints.get(url, {"last_completed_index": -1})
+            except:
+                return {"last_completed_index": -1}
+        return {"last_completed_index": -1}
+    
+    def _save_checkpoint(self, url, index):
+        """Save checkpoint after processing a remix"""
+        try:
+            checkpoints = {}
+            if self.checkpoint_file.exists():
+                try:
+                    with open(self.checkpoint_file, 'r') as f:
+                        checkpoints = json.load(f)
+                except:
+                    pass
+            
+            checkpoints[url] = {
+                "last_completed_index": index,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            with open(self.checkpoint_file, 'w') as f:
+                json.dump(checkpoints, f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save checkpoint: {e}")
+    
+    def _clear_checkpoint(self, url):
+        """Clear checkpoint for a URL after successful completion"""
+        try:
+            if self.checkpoint_file.exists():
+                with open(self.checkpoint_file, 'r') as f:
+                    checkpoints = json.load(f)
+                
+                if url in checkpoints:
+                    del checkpoints[url]
+                    
+                with open(self.checkpoint_file, 'w') as f:
+                    json.dump(checkpoints, f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not clear checkpoint: {e}")
+    
+    def _recover_session(self):
+        """Attempt to recover browser session if lost"""
+        try:
+            print("🔄 Browser session lost, attempting to reconnect...")
+            
+            # Close old session if it exists
+            try:
+                if self.driver:
+                    self.driver.quit()
+            except:
+                pass
+            
+            # Reinitialize browser completely
+            print("   🔧 Restarting Chrome browser...")
+            self.browser_mgr = BrowserManager(self.use_existing_chrome, self.debug_port)
+            self.driver = self.browser_mgr.setup()
+            self.navigator = RemixNavigator(self.driver, slow_mode=self.slow_mode)
+            self.downloader = VideoDownloader(self.driver)
+            self.metadata_extractor = MetadataExtractor(self.driver)
+            
+            print("✅ Browser session recovered")
+            return True
+        
+        except Exception as e:
+            print(f"❌ Failed to recover session: {e}")
+            return False
+    
+    def scrape_remixes(self, start_url, max_remixes=None, download_videos=True, retry_on_error=True):
         """
-        Main scraping function - simplified approach
+        Main scraping function - simplified approach with session recovery and checkpointing
         
         Args:
             start_url: URL of the page with remixes
             max_remixes: Maximum number of remixes to scrape
             download_videos: Whether to download videos or just metadata
+            retry_on_error: Whether to retry on session errors
         """
         print("="*70)
         print("🎬 SORA REMIX SCRAPER")
@@ -98,18 +218,38 @@ class SoraRemixScraper:
         print(f"Max remixes: {max_remixes if max_remixes else 'Unlimited'}")
         print(f"Download videos: {'Yes' if download_videos else 'No'}")
         print(f"Output directory: {self.output_dir}")
+        
+        # Check for checkpoint
+        checkpoint = self._load_checkpoint(start_url)
+        last_completed = checkpoint["last_completed_index"]
+        
+        if last_completed >= 0:
+            print(f"📍 Found checkpoint: Last completed remix index = {last_completed}")
+            print(f"🔄 Will resume from index {last_completed + 1}")
         print()
         
-        # Navigate to start URL
-        print(f"🌐 Navigating to start URL...")
-        print(f"🔍 DEBUG: Start URL = {start_url}")
-        self.driver.get(start_url)
-        self._sleep('page_load')
-        
-        # Verify we're on the right page
-        actual_url = self.driver.current_url
-        print(f"🔍 DEBUG: Actual URL after navigation = {actual_url}")
-        print("✅ Page loaded\n")
+        # Navigate to start URL with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"🌐 Navigating to start URL...")
+                print(f"🔍 DEBUG: Start URL = {start_url}")
+                self.driver.get(start_url)
+                self._sleep('page_load')
+                
+                # Verify we're on the right page
+                actual_url = self.driver.current_url
+                print(f"🔍 DEBUG: Actual URL after navigation = {actual_url}")
+                print("✅ Page loaded\n")
+                break
+            
+            except Exception as e:
+                if self._is_session_error(e) and retry_on_error and attempt < max_retries - 1:
+                    print(f"⚠️  Session error on attempt {attempt + 1}/{max_retries}")
+                    if self._recover_session():
+                        print(f"🔄 Retrying navigation...")
+                        continue
+                raise
         
         # Step 1: Load all remixes
         total_loaded = self.navigator.load_all_remixes(target_count=max_remixes)
@@ -129,73 +269,20 @@ class SoraRemixScraper:
         all_metadata = []
         successful_downloads = 0
         
-        # Step 2.5: First, download the START page (before clicking any button)
-        print(f"[0/{remixes_to_process}] Processing START page...")
-        print(f"🔍 DEBUG: Start page URL = {self.driver.current_url}")
-        
-        try:
-            start_page_url = self.driver.current_url
-            
-            # Extract metadata
-            print(f"   📊 Extracting metadata from start page...")
-            metadata = self.metadata_extractor.extract_metadata(start_page_url)
-            
-            # Download video if requested
-            if download_videos:
-                print(f"   🎥 Looking for video...")
-                video_url = self.downloader.extract_video_url()
-                
-                if video_url:
-                    print(f"      ✅ Found video URL")
-                    metadata["video_url"] = video_url
-                    
-                    video_filename = f"remix_0000_start.mp4"
-                    video_path = self.output_dir / video_filename
-                    
-                    if self.downloader.download_video(video_url, video_path):
-                        metadata["downloaded_file"] = str(video_path)
-                        successful_downloads += 1
-                else:
-                    print(f"      ⚠️  No video found")
-            
-            # Save metadata
-            metadata_file = self.output_dir / f"remix_0000_start_metadata.json"
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-            print(f"   💾 Metadata saved: {metadata_file.name}")
-            
-            all_metadata.append(metadata)
-            print()
-            
-        except Exception as e:
-            print(f"   ❌ Error processing start page: {e}")
-            print()
-        
-        # Step 3: Loop through remixes - NO GOING BACK!
-        # Just click button[0], download, then click button[1], download, etc.
-        for i in range(remixes_to_process):
-            print(f"[{i+1}/{remixes_to_process}] Processing remix {i}...")
-            print(f"🔍 DEBUG: Current page URL = {self.driver.current_url}")
+        # Step 2.5: First, download the START page (if not already done)
+        if last_completed < 0:  # Haven't processed start page yet
+            print(f"[0/{remixes_to_process}] Processing START page...")
+            print(f"🔍 DEBUG: Start page URL = {self.driver.current_url}")
             
             try:
-                # Click the button at index i
-                print(f"   🖱️  Clicking remix thumbnail {i}...")
-                if not self.navigator.click_remix_button(i):
-                    print(f"   ⚠️  Skipping remix {i}")
-                    continue
-                
-                self._sleep('after_click')
-                
-                current_url = self.driver.current_url
-                print(f"   ✅ Navigated to: {current_url}")
+                start_page_url = self.driver.current_url
                 
                 # Extract metadata
-                print(f"   📊 Extracting metadata...")
-                metadata = self.metadata_extractor.extract_metadata(current_url)
+                print(f"   📊 Extracting metadata from start page...")
+                metadata = self.metadata_extractor.extract_metadata(start_page_url)
                 
                 # Download video if requested
                 if download_videos:
-                    self._sleep('before_download')
                     print(f"   🎥 Looking for video...")
                     video_url = self.downloader.extract_video_url()
                     
@@ -203,32 +290,135 @@ class SoraRemixScraper:
                         print(f"      ✅ Found video URL")
                         metadata["video_url"] = video_url
                         
-                        # Download
-                        video_filename = f"remix_{i+1:04d}.mp4"
+                        video_filename = f"remix_0000_start.mp4"
                         video_path = self.output_dir / video_filename
                         
                         if self.downloader.download_video(video_url, video_path):
                             metadata["downloaded_file"] = str(video_path)
                             successful_downloads += 1
-                            self._sleep('after_download')
                     else:
                         print(f"      ⚠️  No video found")
                 
-                # Save individual metadata
-                metadata_file = self.output_dir / f"remix_{i+1:04d}_metadata.json"
+                # Save metadata
+                metadata_file = self.output_dir / f"remix_0000_start_metadata.json"
                 with open(metadata_file, 'w', encoding='utf-8') as f:
                     json.dump(metadata, f, indent=2, ensure_ascii=False)
                 print(f"   💾 Metadata saved: {metadata_file.name}")
                 
                 all_metadata.append(metadata)
-                
-                # NO GOING BACK! Just continue to next remix
-                # The next iteration will click the next button from this page
                 print()
                 
             except Exception as e:
-                print(f"   ❌ Error: {e}")
+                print(f"   ❌ Error processing start page: {e}")
                 print()
+        else:
+            print(f"⏭️  Skipping start page (already processed)")
+            print()
+        
+        # Step 3: Loop through remixes with checkpoint support
+        start_index = max(0, last_completed + 1)
+        
+        if start_index > 0:
+            print(f"🔄 Resuming from remix index {start_index}")
+            print()
+        
+        for i in range(start_index, remixes_to_process):
+            print(f"[{i+1}/{remixes_to_process}] Processing remix {i}...")
+            print(f"🔍 DEBUG: Current page URL = {self.driver.current_url}")
+            
+            remix_success = False
+            max_remix_retries = 3
+            
+            for retry_attempt in range(max_remix_retries):
+                try:
+                    # Click the button at index i
+                    print(f"   🖱️  Clicking remix thumbnail {i}...")
+                    if not self.navigator.click_remix_button(i):
+                        print(f"   ⚠️  Skipping remix {i}")
+                        break
+                    
+                    self._sleep('after_click')
+                    
+                    current_url = self.driver.current_url
+                    print(f"   ✅ Navigated to: {current_url}")
+                    
+                    # Extract metadata
+                    print(f"   📊 Extracting metadata...")
+                    metadata = self.metadata_extractor.extract_metadata(current_url)
+                    
+                    # Download video if requested
+                    if download_videos:
+                        self._sleep('before_download')
+                        print(f"   🎥 Looking for video...")
+                        video_url = self.downloader.extract_video_url()
+                        
+                        if video_url:
+                            print(f"      ✅ Found video URL")
+                            metadata["video_url"] = video_url
+                            
+                            # Download
+                            video_filename = f"remix_{i+1:04d}.mp4"
+                            video_path = self.output_dir / video_filename
+                            
+                            if self.downloader.download_video(video_url, video_path):
+                                metadata["downloaded_file"] = str(video_path)
+                                successful_downloads += 1
+                                self._sleep('after_download')
+                        else:
+                            print(f"      ⚠️  No video found")
+                    
+                    # Save individual metadata
+                    metadata_file = self.output_dir / f"remix_{i+1:04d}_metadata.json"
+                    with open(metadata_file, 'w', encoding='utf-8') as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                    print(f"   💾 Metadata saved: {metadata_file.name}")
+                    
+                    all_metadata.append(metadata)
+                    
+                    # Save checkpoint after successful processing
+                    self._save_checkpoint(start_url, i)
+                    print(f"   💾 Checkpoint saved (index {i})")
+                    
+                    remix_success = True
+                    print()
+                    break  # Success, exit retry loop
+                
+                except Exception as e:
+                    error_msg = str(e)
+                    
+                    # Check if it's a session error
+                    if self._is_session_error(e) and retry_attempt < max_remix_retries - 1:
+                        print(f"   ⚠️  Session error on retry {retry_attempt + 1}/{max_remix_retries}")
+                        print(f"   🔄 Attempting to recover and continue...")
+                        
+                        if self._recover_session():
+                            # Navigate back to start URL
+                            try:
+                                print(f"   🌐 Navigating back to: {start_url}")
+                                self.driver.get(start_url)
+                                self._sleep('page_load')
+                                
+                                # Reload remixes
+                                print(f"   🔄 Reloading remixes...")
+                                self.navigator.load_all_remixes(target_count=max_remixes)
+                                
+                                print(f"   🔄 Retrying remix {i}...")
+                                continue
+                            except Exception as nav_error:
+                                print(f"   ❌ Failed to navigate back: {nav_error}")
+                        else:
+                            print(f"   ❌ Session recovery failed")
+                    
+                    # If not a session error or last retry, log and continue
+                    if retry_attempt == max_remix_retries - 1:
+                        if len(error_msg) > 200:
+                            error_msg = error_msg[:200] + "..."
+                        print(f"   ❌ Error after {max_remix_retries} attempts: {error_msg}")
+                        print()
+                        break
+            
+            # Continue to next remix even if this one failed
+            if not remix_success:
                 continue
         
         # Save combined metadata
@@ -343,7 +533,25 @@ Examples:
         # Process each URL
         total_urls = len(urls_to_process)
         
+        # Load progress for batch mode
+        if total_urls > 1:
+            progress = scraper._load_progress()
+            completed_count = len(progress["completed_urls"])
+            if completed_count > 0:
+                print(f"📊 Found {completed_count} already completed URL(s)")
+                print(f"🔄 Will skip completed URLs and resume where left off\n")
+        processed_count = 0
+        skipped_count = 0
+        failed_count = 0
+        
         for idx, url in enumerate(urls_to_process, 1):
+            # Check if already completed (for batch mode)
+            if total_urls > 1 and scraper._is_completed(url):
+                skipped_count += 1
+                print(f"\n⏭️  Skipping URL {idx}/{total_urls} (already completed)")
+                print(f"URL: {url}")
+                continue
+            
             if total_urls > 1:
                 print("\n" + "="*70)
                 print(f"🎯 PROCESSING URL {idx}/{total_urls}")
@@ -352,24 +560,56 @@ Examples:
                 print()
             
             try:
-                # Run scraper on this URL
-                scraper.scrape_remixes(
-                    start_url=url,
-                    max_remixes=args.max,
-                    download_videos=not args.metadata_only
-                )
+                # Run scraper on this URL with retry logic
+                max_url_retries = 2
+                url_success = False
                 
-                if total_urls > 1:
-                    print(f"\n✅ Completed URL {idx}/{total_urls}")
+                for url_attempt in range(max_url_retries):
+                    try:
+                        scraper.scrape_remixes(
+                            start_url=url,
+                            max_remixes=args.max,
+                            download_videos=not args.metadata_only
+                        )
+                        url_success = True
+                        break
                     
-                    # Add delay between URLs if in slow mode and not the last URL
-                    if args.slow and idx < total_urls:
-                        wait_time = random.uniform(5.0, 8.0)
-                        print(f"⏳ Waiting {wait_time:.1f}s before next URL...")
-                        time.sleep(wait_time)
+                    except Exception as scrape_error:
+                        # Check if it's a session error
+                        if "invalid session id" in str(scrape_error).lower() and url_attempt < max_url_retries - 1:
+                            print(f"\n⚠️  Session error, attempting recovery...")
+                            if scraper._recover_session():
+                                print(f"🔄 Retrying URL {idx}/{total_urls}...")
+                                time.sleep(2)
+                                continue
+                        # Re-raise if not recoverable or last attempt
+                        raise
+                
+                if url_success:
+                    processed_count += 1
+                    
+                    # Save progress (mark URL as completed)
+                    if total_urls > 1:
+                        scraper._save_progress(url)
+                    
+                    if total_urls > 1:
+                        print(f"\n✅ Completed URL {idx}/{total_urls}")
+                        
+                        # Add delay between URLs if in slow mode and not the last URL
+                        if args.slow and idx < total_urls:
+                            wait_time = random.uniform(5.0, 8.0)
+                            print(f"⏳ Waiting {wait_time:.1f}s before next URL...")
+                            time.sleep(wait_time)
             
             except Exception as e:
-                print(f"\n❌ Error processing URL {idx}/{total_urls}: {e}")
+                failed_count += 1
+                error_msg = str(e)
+                
+                # Shorten error message if it's too long
+                if len(error_msg) > 200:
+                    error_msg = error_msg[:200] + "..."
+                
+                print(f"\n❌ Error processing URL {idx}/{total_urls}: {error_msg}")
                 print("⚠️  Continuing to next URL...")
                 import traceback
                 traceback.print_exc()
@@ -381,8 +621,16 @@ Examples:
             print("\n" + "="*70)
             print(f"🎉 BATCH PROCESSING COMPLETE")
             print("="*70)
-            print(f"Processed {total_urls} URL(s)")
+            print(f"Total URLs in batch: {total_urls}")
+            print(f"✅ Successfully processed: {processed_count}")
+            print(f"⏭️  Skipped (already done): {skipped_count}")
+            print(f"❌ Failed: {failed_count}")
             print()
+            
+            if failed_count > 0:
+                print("💡 Tip: Failed URLs were NOT marked as completed.")
+                print("   Run the same command again to retry only the failed ones.")
+                print()
     
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")
