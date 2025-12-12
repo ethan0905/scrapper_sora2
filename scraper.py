@@ -37,7 +37,7 @@ class SoraRemixScraper:
         self.downloader = None
         self.metadata_extractor = None
         self.output_dir = pathlib.Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.slow_mode = slow_mode
         self.use_existing_chrome = use_existing_chrome
         self.debug_port = debug_port
@@ -533,6 +533,10 @@ Examples:
         # Process each URL
         total_urls = len(urls_to_process)
         
+        # Store the original output directory for progress tracking
+        base_output_dir = pathlib.Path(args.output)
+        base_progress_file = base_output_dir / ".batch_progress.json"
+        
         # Load progress for batch mode
         if total_urls > 1:
             progress = scraper._load_progress()
@@ -560,6 +564,21 @@ Examples:
                 print()
             
             try:
+                # Create subdirectory for this URL (for batch mode)
+                if total_urls > 1:
+                    url_output_dir = base_output_dir / f"url-{idx}"
+                    url_output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Update scraper's output directory for this URL
+                    scraper.output_dir = url_output_dir
+                    # Keep checkpoint file in the URL-specific folder
+                    scraper.checkpoint_file = url_output_dir / ".scrape_checkpoint.json"
+                    # But keep progress file at the base level for tracking all URLs
+                    scraper.progress_file = base_progress_file
+                    
+                    print(f"📁 Output directory: {url_output_dir}")
+                    print()
+                
                 # Run scraper on this URL with retry logic
                 max_url_retries = 2
                 url_success = False
