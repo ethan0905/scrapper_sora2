@@ -1,19 +1,57 @@
-/videos
-.gitignore
-*.md
-*.txt
-!example*.txt
-.DS_Store
-
-# But include important docs
-!README.md
-WATERMARK_REMOVAL_GUIDE.md
+# Python
 __pycache__/
-*.html
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
 .env
-/venv
-/videos_cleaned
-/remix*
+.env.local
+
+# Output directories
+/videos/
+/videos_cleaned/
+/remix*/
+*.mp4
+*.mov
+*.avi
+
+# Logs and temp files
+*.log
+*.html
+*.json.bak
+test_output.log
+
+# YouTube credentials (IMPORTANT!)
+youtube_credentials.json
+youtube_token.json
+
+# Batch processing
+.batch_progress.json
+.scrape_checkpoint.json
+
+# Archive (old files)
+/archive/
 
 # Sora watermark remover
 sora-watermark-remover/.venv/
@@ -24,4 +62,9 @@ sora-watermark-remover/weights/
 sora-watermark-remover/outputs/
 sora-watermark-remover/node_modules/
 
-__pycache__/
+# Keep important files
+!README.md
+!requirements.txt
+!requirements_selenium.txt
+!example*.txt
+!docs/*.md
