@@ -68,3 +68,5 @@ sora-watermark-remover/node_modules/
 !requirements_selenium.txt
 !example*.txt
 !docs/*.md
+
+example-remix-to-scrape.txt
