@@ -193,6 +193,37 @@ cmd_status() {
         else
             echo "⏰ Last upload: Never"
         fi
+        
+        # Check for consecutive failures
+        FAILURES=$(grep -o '"consecutive_failures": [0-9]*' "$PROJECT_DIR/single-upload/.upload_state.json" | grep -o '[0-9]*$' || echo "0")
+        if [ "$FAILURES" -gt 0 ]; then
+            if [ "$FAILURES" -ge 10 ]; then
+                echo ""
+                print_error "🛑 CRITICAL: Service stopped due to too many failures!"
+                echo "   Consecutive failures: $FAILURES/10"
+                LAST_ERROR=$(grep -o '"last_error": "[^"]*"' "$PROJECT_DIR/single-upload/.upload_state.json" | cut -d'"' -f4)
+                if [ ! -z "$LAST_ERROR" ]; then
+                    echo "   Last error: $LAST_ERROR"
+                fi
+                echo ""
+                print_info "To fix:"
+                echo "   1. Check logs: ./scripts/service.sh errors"
+                echo "   2. Fix the issue (check YouTube quota, credentials, etc.)"
+                echo "   3. Reset failures: ./scripts/service.sh reset-failures"
+                echo "   4. Restart service: ./scripts/service.sh restart"
+            elif [ "$FAILURES" -ge 7 ]; then
+                echo ""
+                print_warning "⚠️  Warning: Multiple consecutive failures detected!"
+                echo "   Consecutive failures: $FAILURES/10"
+                LAST_ERROR=$(grep -o '"last_error": "[^"]*"' "$PROJECT_DIR/single-upload/.upload_state.json" | cut -d'"' -f4)
+                if [ ! -z "$LAST_ERROR" ]; then
+                    echo "   Last error: $LAST_ERROR"
+                fi
+                echo "   Check logs: ./scripts/service.sh errors"
+            else
+                echo "⚠️  Consecutive failures: $FAILURES"
+            fi
+        fi
     fi
     
     # Check log file
@@ -238,21 +269,81 @@ cmd_errors() {
     tail -n 50 "$ERROR_LOG"
 }
 
+cmd_reset_failures() {
+    STATE_FILE="$PROJECT_DIR/single-upload/.upload_state.json"
+    
+    if [ ! -f "$STATE_FILE" ]; then
+        print_warning "No state file found - nothing to reset"
+        exit 0
+    fi
+    
+    # Check current failures
+    FAILURES=$(grep -o '"consecutive_failures": [0-9]*' "$STATE_FILE" | grep -o '[0-9]*$' || echo "0")
+    
+    if [ "$FAILURES" -eq 0 ]; then
+        print_success "No failures to reset (count is already 0)"
+        exit 0
+    fi
+    
+    print_info "Current consecutive failures: $FAILURES"
+    echo ""
+    print_warning "This will reset the failure counter to 0."
+    echo ""
+    read -p "Continue? (y/N): " -n 1 -r
+    echo ""
+    
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Cancelled"
+        exit 0
+    fi
+    
+    # Reset failures in state file
+    if command -v python3 &> /dev/null; then
+        python3 -c "
+import json
+state_file = '$STATE_FILE'
+try:
+    with open(state_file, 'r') as f:
+        state = json.load(f)
+    
+    state['consecutive_failures'] = 0
+    state['last_error'] = None
+    
+    with open(state_file, 'w') as f:
+        json.dump(state, f, indent=2)
+except Exception as e:
+    print(f'Error: {e}')
+    exit(1)
+"
+        print_success "Failure counter reset successfully"
+    else
+        # Fallback: use sed
+        sed -i '' 's/"consecutive_failures": [0-9]*/"consecutive_failures": 0/' "$STATE_FILE"
+        sed -i '' 's/"last_error": "[^"]*"/"last_error": null/' "$STATE_FILE"
+        print_success "Failure counter reset successfully"
+    fi
+    
+    echo ""
+    print_info "You can now restart the service:"
+    echo "  ./scripts/service.sh restart"
+}
+
 cmd_help() {
     print_header
     
     echo "Usage: ./scripts/service.sh [command]"
     echo ""
     echo "Commands:"
-    echo "  install      Install and start the background service"
-    echo "  uninstall    Stop and remove the background service"
-    echo "  start        Start the service"
-    echo "  stop         Stop the service"
-    echo "  restart      Restart the service"
-    echo "  status       Show service status and recent activity"
-    echo "  logs         Show live logs (Ctrl+C to exit)"
-    echo "  errors       Show error log"
-    echo "  help         Show this help message"
+    echo "  install          Install and start the background service"
+    echo "  uninstall        Stop and remove the background service"
+    echo "  start            Start the service"
+    echo "  stop             Stop the service"
+    echo "  restart          Restart the service"
+    echo "  status           Show service status and recent activity"
+    echo "  logs             Show live logs (Ctrl+C to exit)"
+    echo "  errors           Show error log"
+    echo "  reset-failures   Reset consecutive failure counter"
+    echo "  help             Show this help message"
     echo ""
     echo "Examples:"
     echo "  ./scripts/service.sh install   # Set up for the first time"
@@ -297,6 +388,10 @@ main() {
             ;;
         errors)
             cmd_errors
+            ;;
+        reset-failures)
+            print_header
+            cmd_reset_failures
             ;;
         help|--help|-h|"")
             cmd_help

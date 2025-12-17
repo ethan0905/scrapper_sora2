@@ -93,7 +93,9 @@ class AutomatedUploader:
         return {
             'last_upload_time': None,
             'uploaded_videos': [],
-            'queue': []
+            'queue': [],
+            'consecutive_failures': 0,
+            'last_error': None
         }
     
     def _save_state(self):
@@ -229,9 +231,11 @@ class AutomatedUploader:
                 self.logger.info(f"   Video ID: {video_id}")
                 self.logger.info(f"   URL: https://www.youtube.com/watch?v={video_id}")
                 
-                # Update state
+                # Update state - RESET failure counter on success
                 self.state['uploaded_videos'].append(str(video_path))
                 self.state['last_upload_time'] = datetime.now().isoformat()
+                self.state['consecutive_failures'] = 0
+                self.state['last_error'] = None
                 self._save_state()
                 
                 # Move to uploaded folder
@@ -248,11 +252,19 @@ class AutomatedUploader:
                 
                 return True
             else:
-                self.logger.error(f"❌ Upload failed: No video ID in response")
+                error_msg = "No video ID in response"
+                self.logger.error(f"❌ Upload failed: {error_msg}")
+                self.state['consecutive_failures'] = self.state.get('consecutive_failures', 0) + 1
+                self.state['last_error'] = error_msg
+                self._save_state()
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ Upload failed: {e}", exc_info=True)
+            error_msg = str(e)
+            self.logger.error(f"❌ Upload failed: {error_msg}", exc_info=True)
+            self.state['consecutive_failures'] = self.state.get('consecutive_failures', 0) + 1
+            self.state['last_error'] = error_msg
+            self._save_state()
             return False
     
     def _should_upload_now(self) -> bool:
@@ -276,13 +288,36 @@ class AutomatedUploader:
         
         return remaining if remaining.total_seconds() > 0 else timedelta(0)
     
-    def run(self):
-        """Run the automated uploader loop."""
+    def run(self, max_consecutive_failures: int = 10):
+        """
+        Run the automated uploader loop.
+        
+        Args:
+            max_consecutive_failures: Stop after this many consecutive failures (default: 10)
+        """
         self.logger.info("🚀 Starting automated uploader...")
+        self.logger.info(f"   Max consecutive failures: {max_consecutive_failures}")
         self.logger.info("   Press Ctrl+C to stop")
         
         try:
             while True:
+                # Check failure threshold
+                failures = self.state.get('consecutive_failures', 0)
+                if failures >= max_consecutive_failures:
+                    self.logger.critical(f"\n{'='*60}")
+                    self.logger.critical(f"🛑 CRITICAL: Too many consecutive failures!")
+                    self.logger.critical(f"{'='*60}")
+                    self.logger.critical(f"   Failed attempts: {failures}")
+                    self.logger.critical(f"   Last error: {self.state.get('last_error', 'Unknown')}")
+                    self.logger.critical(f"   Stopping uploader for safety.")
+                    self.logger.critical(f"\n   To restart:")
+                    self.logger.critical(f"   1. Fix the issue")
+                    self.logger.critical(f"   2. Reset failures: rm {self.state_file}")
+                    self.logger.critical(f"   3. Restart service: ./scripts/service.sh restart")
+                    self.logger.critical(f"{'='*60}\n")
+                    # Exit with error code
+                    sys.exit(1)
+                
                 # Check if we should upload
                 if self._should_upload_now():
                     # Get next video
@@ -300,7 +335,13 @@ class AutomatedUploader:
                             next_time = datetime.now() + self.upload_interval
                             self.logger.info(f"⏰ Next upload: {next_time.strftime('%Y-%m-%d %H:%M:%S')}")
                         else:
-                            self.logger.error(f"\n❌ Upload failed, will retry next cycle")
+                            failures = self.state.get('consecutive_failures', 0)
+                            self.logger.error(f"\n❌ Upload failed!")
+                            self.logger.error(f"   Consecutive failures: {failures}/{max_consecutive_failures}")
+                            self.logger.error(f"   Last error: {self.state.get('last_error', 'Unknown')}")
+                            if failures >= max_consecutive_failures - 3:
+                                self.logger.warning(f"   ⚠️  Warning: Approaching failure limit!")
+                            self.logger.error(f"   Will retry next cycle")
                     else:
                         self.logger.warning(f"\n⚠️  No videos available to upload")
                         self.logger.info(f"   Add videos to: {self.source_folder}")
@@ -366,6 +407,12 @@ def main():
         type=str,
         help='Path to log file'
     )
+    parser.add_argument(
+        '--max-failures',
+        type=int,
+        default=10,
+        help='Stop after this many consecutive upload failures (default: 10)'
+    )
     
     args = parser.parse_args()
     
@@ -379,7 +426,7 @@ def main():
         log_file=args.log
     )
     
-    uploader.run()
+    uploader.run(max_consecutive_failures=args.max_failures)
 
 
 if __name__ == '__main__':
