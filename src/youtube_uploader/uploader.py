@@ -84,6 +84,15 @@ class YouTubeUploader:
         self.default_category = default_category
         self.default_privacy = default_privacy
         
+        # Validate that source is a folder (not a file)
+        if self.source_folder.exists() and self.source_folder.is_file():
+            raise ValueError(
+                f"❌ Error: Source must be a FOLDER, not a file!\n"
+                f"You provided: {source_folder}\n"
+                f"Please provide the folder containing videos, not a video file.\n"
+                f"Example: --source videos/remix-batch-3/url-18"
+            )
+        
         # Create folders if they don't exist
         self.source_folder.mkdir(parents=True, exist_ok=True)
         self.destination_folder.mkdir(parents=True, exist_ok=True)
@@ -362,40 +371,90 @@ Setup Instructions:
         """
     )
     
-    parser.add_argument("--source", required=True, help="Source folder with videos to upload")
+    parser.add_argument("--source", required=True, help="Source folder (or single video file) to upload")
     parser.add_argument("--dest", required=True, help="Destination folder for uploaded videos")
     parser.add_argument("--credentials", default="youtube_credentials.json", help="Path to credentials JSON")
     parser.add_argument("--watch", action="store_true", help="Watch mode - continuously monitor folder")
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds (default: 60)")
     parser.add_argument("--title", default="Sora Video", help="Default title for videos")
     parser.add_argument("--description", default="Video created with Sora AI", help="Default description")
-    parser.add_argument("--privacy", default="private", choices=['public', 'private', 'unlisted'], 
-                        help="Privacy status (default: private)")
+    parser.add_argument("--privacy", default="public", choices=['public', 'private', 'unlisted'], 
+                        help="Privacy status (default: public)")
     
     args = parser.parse_args()
     
-    # Create uploader
-    uploader = YouTubeUploader(
-        source_folder=args.source,
-        destination_folder=args.dest,
-        credentials_file=args.credentials,
-        default_title=args.title,
-        default_description=args.description,
-        default_privacy=args.privacy
-    )
+    # Check if source is a single file
+    source_path = Path(args.source)
     
-    try:
-        # Process folder
-        uploader.process_folder(watch_mode=args.watch, interval=args.interval)
+    if source_path.is_file():
+        # Single file mode
+        print("="*70)
+        print("📺 YOUTUBE UPLOADER - Single File Mode")
+        print("="*70)
+        print(f"File: {source_path}")
+        print(f"Destination: {args.dest}")
+        print()
         
-        print("\n✅ All done!")
-    
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
-    except Exception as e:
-        print(f"\n\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        # Create temp folder for single file
+        temp_source = source_path.parent / ".temp_upload"
+        temp_source.mkdir(exist_ok=True)
+        
+        # Copy file to temp folder
+        import shutil
+        temp_file = temp_source / source_path.name
+        if not temp_file.exists():
+            shutil.copy(str(source_path), str(temp_file))
+        
+        # Create uploader with temp folder
+        uploader = YouTubeUploader(
+            source_folder=str(temp_source),
+            destination_folder=args.dest,
+            credentials_file=args.credentials,
+            default_title=args.title,
+            default_description=args.description,
+            default_privacy=args.privacy
+        )
+        
+        try:
+            # Process the single file
+            uploader.process_folder(watch_mode=False, interval=args.interval)
+            
+            # Cleanup temp folder
+            shutil.rmtree(temp_source)
+            print("\n✅ Upload complete!")
+        
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Interrupted by user")
+            shutil.rmtree(temp_source, ignore_errors=True)
+        except Exception as e:
+            print(f"\n\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            shutil.rmtree(temp_source, ignore_errors=True)
+    else:
+        # Folder mode (original behavior)
+        # Create uploader
+        uploader = YouTubeUploader(
+            source_folder=args.source,
+            destination_folder=args.dest,
+            credentials_file=args.credentials,
+            default_title=args.title,
+            default_description=args.description,
+            default_privacy=args.privacy
+        )
+        
+        try:
+            # Process folder
+            uploader.process_folder(watch_mode=args.watch, interval=args.interval)
+            
+            print("\n✅ All done!")
+        
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Interrupted by user")
+        except Exception as e:
+            print(f"\n\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":
