@@ -1,0 +1,11 @@
+# Requirements for Vision-Based Title Generator
+# This extends the base requirements with AI/ML dependencies
+
+# Computer Vision
+opencv-python>=4.8.0
+
+# OpenAI API
+openai>=2.0.0
+
+# Environment Variables
+python-dotenv>=1.0.0
