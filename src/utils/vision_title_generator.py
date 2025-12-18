@@ -8,8 +8,10 @@ engaging titles based on what's actually happening in the video.
 import json
 import base64
 import os
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
+from datetime import datetime, timedelta
 import cv2
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -84,12 +86,13 @@ STYLE_PROMPTS = {
 class VisionTitleGenerator:
     """Generates YouTube titles by analyzing video frames with GPT-4o vision."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, rate_limit_rpm: int = 20):
         """
         Initialize the vision title generator.
         
         Args:
             api_key: OpenAI API key (or uses OPENAI_API_KEY env var)
+            rate_limit_rpm: Max requests per minute (default: 20 for safety)
         """
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         if not self.api_key:
@@ -99,6 +102,57 @@ class VisionTitleGenerator:
             )
         
         self.client = OpenAI(api_key=self.api_key)
+        
+        # Rate limiting configuration
+        self.rate_limit_rpm = rate_limit_rpm
+        self.min_delay_seconds = 2.0  # Minimum delay between calls
+        self.last_call_time = None
+        self.call_times = []  # Track recent API calls
+        
+        print(f"⚡ Rate limit: {rate_limit_rpm} requests/minute")
+    
+    def _rate_limit_wait(self):
+        """
+        Enforce rate limiting to prevent OpenAI API bans.
+        
+        - Ensures minimum delay between calls
+        - Limits requests per minute
+        - Logs when rate limit is hit
+        """
+        now = datetime.now()
+        
+        # Remove calls older than 1 minute
+        self.call_times = [
+            t for t in self.call_times 
+            if now - t < timedelta(minutes=1)
+        ]
+        
+        # If we've hit the per-minute limit, wait
+        if len(self.call_times) >= self.rate_limit_rpm:
+            oldest_call = self.call_times[0]
+            wait_until = oldest_call + timedelta(minutes=1)
+            sleep_seconds = (wait_until - now).total_seconds()
+            
+            if sleep_seconds > 0:
+                print(f"⏳ Rate limit reached ({self.rate_limit_rpm} RPM), waiting {sleep_seconds:.1f}s...")
+                time.sleep(sleep_seconds)
+                # Clean up old calls after waiting
+                now = datetime.now()
+                self.call_times = [
+                    t for t in self.call_times 
+                    if now - t < timedelta(minutes=1)
+                ]
+        
+        # Enforce minimum delay between consecutive calls
+        if self.last_call_time:
+            elapsed = (now - self.last_call_time).total_seconds()
+            if elapsed < self.min_delay_seconds:
+                sleep_time = self.min_delay_seconds - elapsed
+                time.sleep(sleep_time)
+        
+        # Record this call
+        self.last_call_time = datetime.now()
+        self.call_times.append(self.last_call_time)
     
     def extract_frames(
         self,
@@ -217,8 +271,11 @@ class VisionTitleGenerator:
                 }
             })
         
-        # Call GPT-4o vision
+        # Call GPT-4o vision (with rate limiting)
         print("🤖 Generating title with GPT-4o mini vision...\n")
+        
+        # Enforce rate limiting before API call
+        self._rate_limit_wait()
         
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
