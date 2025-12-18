@@ -40,6 +40,7 @@ Thumbs.db
 *.log
 *.html
 *.json.bak
+/logs/
 test_output.log
 
 # YouTube credentials (IMPORTANT!)
@@ -62,11 +63,11 @@ sora-watermark-remover/weights/
 sora-watermark-remover/outputs/
 sora-watermark-remover/node_modules/
 
-# Keep important files
-!README.md
-!requirements.txt
-!requirements_selenium.txt
-!example*.txt
+# Markdown files in root (only keep docs/*.md)
+/*.md
+
+# Keep important doc files in docs folder only
 !docs/*.md
+!docs/**/*.md
 
 example-remix-to-scrape.txt

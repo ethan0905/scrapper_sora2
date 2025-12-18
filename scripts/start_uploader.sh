@@ -11,7 +11,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VENV_PATH="$PROJECT_DIR/venv"
 PYTHON="$VENV_PATH/bin/python"
 UPLOAD_SCRIPT="$PROJECT_DIR/src/utils/auto_uploader.py"
-LOG_FILE="$PROJECT_DIR/single-upload/upload_scheduler.log"
+LOG_FILE="$PROJECT_DIR/logs/upload_scheduler.log"
 
 # Load environment variables
 if [ -f "$PROJECT_DIR/.env" ]; then

@@ -52,8 +52,12 @@ class AutomatedUploader:
         # Create source folder if it doesn't exist
         self.source_folder.mkdir(parents=True, exist_ok=True)
         
+        # Create logs folder if it doesn't exist
+        logs_folder = Path("logs")
+        logs_folder.mkdir(parents=True, exist_ok=True)
+        
         # Setup logging
-        log_file = log_file or self.source_folder / "upload_scheduler.log"
+        log_file = log_file or logs_folder / "upload_scheduler.log"
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',

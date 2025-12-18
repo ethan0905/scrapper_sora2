@@ -20,10 +20,10 @@
     <true/>
     
     <key>StandardOutPath</key>
-    <string>/Users/ethan/Desktop/scrapper_sora2/single-upload/uploader_stdout.log</string>
+    <string>/Users/ethan/Desktop/scrapper_sora2/logs/uploader_stdout.log</string>
     
     <key>StandardErrorPath</key>
-    <string>/Users/ethan/Desktop/scrapper_sora2/single-upload/uploader_stderr.log</string>
+    <string>/Users/ethan/Desktop/scrapper_sora2/logs/uploader_stderr.log</string>
     
     <key>EnvironmentVariables</key>
     <dict>
